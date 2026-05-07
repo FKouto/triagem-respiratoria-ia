@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from backend.model import obeter_dados_e_treinar, prever_gravidade, get_stats
+from model import obeter_dados_e_treinar, prever_gravidade, get_stats
 
 app = FastAPI(title="Triagem Respiratória IA - Backend")
 
