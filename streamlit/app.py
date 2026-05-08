@@ -57,12 +57,16 @@ if st.session_state.trainedModel:
 
 st.divider()
 
+@st.cache_data(ttl=10800, show_spinner=False)
+def fetch_and_train_from_backend():
+    response = requests.post(f"{API_BASE}/train")
+    response.raise_for_status()
+    return response.json()
+
 def handle_train():
     try:
-        with st.spinner("Processando dataset SIVEP-Gripe e treinando IA..."):
-            response = requests.post(f"{API_BASE}/train")
-            response.raise_for_status()
-            data = response.json()
+        with st.spinner("Processando dataset SIVEP-Gripe e treinando IA (em cache por 3h)..."):
+            data = fetch_and_train_from_backend()
             st.session_state.trainedModel = {"accuracy": data.get("accuracy"), "samples": data.get("samples")}
             st.session_state.step = 'form'
     except requests.exceptions.HTTPError as e:
@@ -71,8 +75,10 @@ def handle_train():
         except:
             error_detail = str(e)
         st.error(f"Erro do Backend: {error_detail}")
+        st.cache_data.clear() # Limpa o cache se der erro
     except Exception as e:
         st.error(f"Erro ao conectar ao backend Python: {e}")
+        st.cache_data.clear() # Limpa o cache se der erro
 
 def get_image_base64(filename):
     try:
