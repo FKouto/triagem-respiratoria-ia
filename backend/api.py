@@ -27,11 +27,14 @@ class PatientFeatures(BaseModel):
     cardiopatia: bool
 
 import glob
+import os
 
 @app.post("/train")
 async def train_model():
     """Lê o CSV da pasta dataset local e treina a Inteligência Artificial"""
-    csv_files = glob.glob("dataset/*.csv")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dataset_pattern = os.path.join(base_dir, "dataset", "*.csv")
+    csv_files = glob.glob(dataset_pattern)
     if not csv_files:
         raise HTTPException(400, "Nenhum arquivo CSV encontrado na pasta 'dataset'.")
         
