@@ -26,22 +26,11 @@ class PatientFeatures(BaseModel):
     diabetes: bool
     cardiopatia: bool
 
-import glob
-import os
-
 @app.post("/train")
 async def train_model():
-    """Lê o CSV da pasta dataset local e treina a Inteligência Artificial"""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    dataset_pattern = os.path.join(base_dir, "dataset", "*.csv")
-    csv_files = glob.glob(dataset_pattern)
-    if not csv_files:
-        raise HTTPException(400, "Nenhum arquivo CSV encontrado na pasta 'dataset'.")
-        
-    file_path = csv_files[0]
-    
+    """Lê os dados do banco Supabase e treina a Inteligência Artificial"""
     try:
-        accuracy, samples = obeter_dados_e_treinar(file_path)
+        accuracy, samples = obeter_dados_e_treinar()
         return {"status": "success", "accuracy": accuracy, "samples": samples}
     except Exception as e:
         raise HTTPException(400, str(e))

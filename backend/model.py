@@ -1,23 +1,52 @@
+import os
 import pandas as pd
 import numpy as np
-from io import StringIO
+import requests
+from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 
 _modelo_treinado = None
 _accuracy = 0.0
 _samples = 0
 
-def obeter_dados_e_treinar(file_path: str):
+load_dotenv()
+
+def obeter_dados_e_treinar():
     global _modelo_treinado, _accuracy, _samples
     
-    # Carregar dados CSV usando Pandas. Evita erros de colunas sujas do DataSUS
-    try:
-        df = pd.read_csv(file_path, sep=';', dtype=str, encoding='utf-8')
-    except UnicodeDecodeError:
-        df = pd.read_csv(file_path, sep=';', dtype=str, encoding='latin-1')
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    if not url or not key:
+        raise ValueError("Configurações do Supabase (SUPABASE_URL ou SUPABASE_KEY) não encontradas no arquivo .env.")
+    
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}"
+    }
+    
+    all_data = []
+    limit = 1000
+    max_total = 50000
+    
+    for offset in range(0, max_total, limit):
+        endpoint = f"{url}/rest/v1/srag?select=*&limit={limit}&offset={offset}"
+        response = requests.get(endpoint, headers=headers)
+        
+        if not response.ok:
+            raise ValueError(f"Erro ao buscar do Supabase: {response.text}")
+            
+        data = response.json()
+        if not data:
+            break
+            
+        all_data.extend(data)
+        if len(data) < limit:
+            break
+            
+    df = pd.DataFrame(all_data)
     
     if len(df) < 2:
-        raise ValueError("Arquivo vazio ou inválido.")
+        raise ValueError("Tabela vazia ou com dados insuficientes no Supabase.")
         
     df.columns = df.columns.str.strip().str.upper()
     df = df.replace('"', '', regex=True)
