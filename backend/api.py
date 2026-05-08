@@ -1,8 +1,8 @@
 # pyrefly: ignore [missing-import]
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from model import obeter_dados_e_treinar, prever_gravidade, get_stats
+from model import obter_dados_e_treinar, prever_gravidade, get_stats
 
 app = FastAPI(title="Triagem Respiratória IA - Backend")
 
@@ -27,10 +27,10 @@ class PatientFeatures(BaseModel):
     cardiopatia: bool
 
 @app.post("/train")
-async def train_model():
+def train_model():
     """Lê os dados do banco Supabase e treina a Inteligência Artificial"""
     try:
-        accuracy, samples = obeter_dados_e_treinar()
+        accuracy, samples = obter_dados_e_treinar()
         return {"status": "success", "accuracy": accuracy, "samples": samples}
     except Exception as e:
         raise HTTPException(400, str(e))
