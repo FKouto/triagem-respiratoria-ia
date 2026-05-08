@@ -1,5 +1,7 @@
 import streamlit as st
 import requests
+import base64
+import os
 
 API_BASE = "http://localhost:8000"
 
@@ -72,6 +74,47 @@ def handle_train():
     except Exception as e:
         st.error(f"Erro ao conectar ao backend Python: {e}")
 
+def get_image_base64(filename):
+    try:
+        path = os.path.join(os.path.dirname(__file__), filename)
+        with open(path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception as e:
+        return ""
+
+def render_body(febre, tosse, dispneia, garganta, cardiopatia, saturacao):
+    img_b64 = get_image_base64("anatomy.png")
+    
+    symptoms_svg = ""
+    # Coordenadas ajustadas para o torso (viewBox 0 0 100 100)
+    if garganta:
+        symptoms_svg += '<circle cx="50" cy="18" r="3" fill="#ef4444" filter="url(#glow)"><animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" /></circle>'
+    if tosse or dispneia or saturacao:
+        # Pulmões
+        symptoms_svg += '<ellipse cx="38" cy="45" rx="5" ry="8" fill="#ef4444" opacity="0.6" filter="url(#glow)"><animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" repeatCount="indefinite" /></ellipse>'
+        symptoms_svg += '<ellipse cx="62" cy="45" rx="5" ry="8" fill="#ef4444" opacity="0.6" filter="url(#glow)"><animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" repeatCount="indefinite" /></ellipse>'
+    if cardiopatia:
+        symptoms_svg += '<circle cx="53" cy="50" r="3.5" fill="#ef4444" filter="url(#glow)"><animate attributeName="opacity" values="0.4;1;0.4" dur="1s" repeatCount="indefinite" /></circle>'
+
+    # Fundo transparente, mas fica avermelhado se tiver febre (visível graças ao mix-blend-mode: multiply)
+    bg_style = "background: rgba(239, 68, 68, 0.15);" if febre else "background: transparent;"
+
+    return f"""<div style="position: relative; width: 100%; max-width: 450px; margin: 0 auto; {bg_style} transition: background 0.5s ease;">
+<img src="data:image/png;base64,{img_b64}" style="width: 100%; display: block; object-fit: contain; aspect-ratio: 1/1; mix-blend-mode: multiply;" />
+<svg viewBox="0 0 100 100" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<filter id="glow">
+<feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+<feMerge>
+<feMergeNode in="coloredBlur"/>
+<feMergeNode in="SourceGraphic"/>
+</feMerge>
+</filter>
+</defs>
+{symptoms_svg}
+</svg>
+</div>"""
+
 if st.session_state.step == 'train':
     st.markdown('<p class="main-title">Inteligência Artificial</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-title">para Triagem Clínica</p>', unsafe_allow_html=True)
@@ -92,8 +135,9 @@ if st.session_state.step == 'train':
 elif st.session_state.step == 'form':
     st.header("Formulário de Sintomas")
     st.markdown("Preencha as informações do paciente para avaliação pela IA.")
+    col_form, col_img = st.columns([1.5, 1])
     
-    with st.form("patient_form"):
+    with col_form:
         st.subheader("Informações Básicas")
         idade = st.slider("Idade do Paciente (anos)", 0, 100, 45)
         
@@ -116,44 +160,48 @@ elif st.session_state.step == 'form':
         with col_c3:
             cardiopatia = st.checkbox("❤️ Cardiopatia")
             
-        submit = st.form_submit_button("Gerar Diagnóstico pela IA ➔", type="primary")
+        st.write("")
+        submit = st.button("Gerar Diagnóstico pela IA ➔", type="primary", use_container_width=True)
         
-        if submit:
-            form_data = {
-                "idade": idade,
-                "saturacao": saturacao,
-                "febre": febre,
-                "tosse": tosse,
-                "garganta": garganta,
-                "dispneia": dispneia,
-                "asma": asma,
-                "diabetes": diabetes,
-                "cardiopatia": cardiopatia
-            }
-            
-            sintomas_principais = tosse or dispneia or saturacao
-            sintomas_secundarios = febre or garganta
-            tem_problema = sintomas_principais or (sintomas_secundarios and (asma or cardiopatia))
-            desc_problema = 'Indícios de Quadro Respiratório Detectados' if tem_problema else 'Saudável / Sem indícios respiratórios'
-            prob_gravidade = 0.0
-            
-            if tem_problema:
-                try:
-                    resp = requests.post(f"{API_BASE}/predict", json=form_data)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    prob_gravidade = data.get("probabilidadeGravidade", 0.0)
-                except Exception as e:
-                    st.error(f"Erro ao conectar ao backend: {e}")
-            
-            st.session_state.resultado = {
-                "temProblema": tem_problema,
-                "descProblema": desc_problema,
-                "probabilidadeGravidade": prob_gravidade,
-                "formData": form_data
-            }
-            st.session_state.step = 'result'
-            st.rerun()
+    with col_img:
+        st.markdown(render_body(febre, tosse, dispneia, garganta, cardiopatia, saturacao), unsafe_allow_html=True)
+        
+    if submit:
+        form_data = {
+            "idade": idade,
+            "saturacao": saturacao,
+            "febre": febre,
+            "tosse": tosse,
+            "garganta": garganta,
+            "dispneia": dispneia,
+            "asma": asma,
+            "diabetes": diabetes,
+            "cardiopatia": cardiopatia
+        }
+        
+        sintomas_principais = tosse or dispneia or saturacao
+        sintomas_secundarios = febre or garganta
+        tem_problema = sintomas_principais or (sintomas_secundarios and (asma or cardiopatia))
+        desc_problema = 'Indícios de Quadro Respiratório Detectados' if tem_problema else 'Saudável / Sem indícios respiratórios'
+        prob_gravidade = 0.0
+        
+        if tem_problema:
+            try:
+                resp = requests.post(f"{API_BASE}/predict", json=form_data)
+                resp.raise_for_status()
+                data = resp.json()
+                prob_gravidade = data.get("probabilidadeGravidade", 0.0)
+            except Exception as e:
+                st.error(f"Erro ao conectar ao backend: {e}")
+        
+        st.session_state.resultado = {
+            "temProblema": tem_problema,
+            "descProblema": desc_problema,
+            "probabilidadeGravidade": prob_gravidade,
+            "formData": form_data
+        }
+        st.session_state.step = 'result'
+        st.rerun()
 
 elif st.session_state.step == 'result':
     resultado = st.session_state.resultado
