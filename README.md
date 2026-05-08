@@ -1,81 +1,68 @@
 # Triagem Respiratória IA 🩺🤖
 
-Este projeto é uma ferramenta full-stack que utiliza **Inteligência Artificial (Regressão Logística)** para identificar e prever preliminarmente a gravidade de possíveis quadros respiratórios de pacientes, comparando perfis e sintomas informados por você com dados massivos governamentais do SIVEP-Gripe (DataSUS).
+Este projeto é uma ferramenta full-stack que utiliza **Inteligência Artificial (Regressão Logística via Scikit-Learn)** para identificar e prever preliminarmente a gravidade de possíveis quadros respiratórios de pacientes, comparando perfis e sintomas informados com dados massivos governamentais do SIVEP-Gripe (DataSUS).
+
+A interface foi projetada como um **Dashboard Médico Premium**, apresentando um modelo anatômico 3D interativo que reage em tempo real aos sintomas (febre, dor de garganta, falta de ar, etc.).
 
 ## 🚀 Arquitetura do Projeto
 
-O projeto é modular e dividido em duas engrenagens principais:
+O projeto é modular e dividido em três pilares principais:
 
-1.  **Cérebro (Backend)**: Uma API construída em **Python + FastAPI**, responsável por fazer o processamento limpo dos dados via **Pandas** e treinar a Inteligência Artificial diretamente via **Scikit-Learn**.
-2.  **Interface visual (Frontend)**: Uma aplicação leve construída com **React + Vite** e lindamente pintada com **Tailwind CSS v4**, enviando e recebendo as informações clínicas da API.
+1. **Cérebro (Backend - FastAPI)**: Uma API construída em **Python + FastAPI**, responsável por realizar o processamento dos dados via **Pandas** e treinar a Inteligência Artificial utilizando **Scikit-Learn**.
+2. **Interface Visual (Frontend - Streamlit)**: Um dashboard interativo moderno criado com **Streamlit**, contando com gráficos avançados de saúde e um boneco 3D anatômico reativo usando propriedades visuais avançadas. Conta com mecanismo de cache de 3h para otimização de performance e redução de latência.
+3. **Banco de Dados (Supabase)**: O dataset original em formato `.csv` foi migrado para o **Supabase** (PostgreSQL na nuvem), de onde a API busca os dados remotos automaticamente via chave de API e paginação REST.
 
 ## ⚙️ Pré-requisitos
 - Python 3.10+
-- Node.js e npm
+- Chave de acesso e URL do Supabase configuradas
 
 ## 💻 Como Rodar Localmente (Passo a Passo)
 
-Para executar o projeto do zero na sua máquina, siga os passos abaixo para configurar os dois servidores (Backend e Frontend).
+Para executar o projeto do zero na sua máquina, siga os passos abaixo para configurar os dois servidores (Backend FastAPI e Frontend Streamlit).
 
-### 0. Clone e Prepare o Dataset
+### 1. Configurar o Banco de Dados (Supabase)
+Crie um arquivo `.env` na raiz do projeto (mesmo nível que a pasta `backend/`) com as suas credenciais do Supabase, que apontam para a tabela `srag` preenchida com os dados governamentais:
 
-> ⚠️ **O arquivo de dataset não está incluído no repositório** (arquivo muito grande, ~50MB). Você precisa baixá-lo manualmente e colocá-lo na pasta correta.
+```env
+SUPABASE_URL="https://sua-url-do-projeto.supabase.co"
+SUPABASE_KEY="sua-chave-anon-publica"
+```
+
+### 2. Backend (Servidor de Inteligência FastAPI)
+Abra o seu terminal na raiz do projeto e configure o ambiente Python:
 
 ```bash
-# Clone o projeto
-git clone https://github.com/usuario/A3-IA.git
-cd A3-IA
-
-# Crie a pasta do dataset
-mkdir dataset
-```
-
-Em seguida, acesse o portal do **OpenDataSUS** e baixe o arquivo CSV do SIVEP-Gripe:
-- 🔗 https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024
-
-Após o download, mova o arquivo `.csv` para dentro da pasta `dataset/`:
-```
-A3-IA/
-└── dataset/
-    └── INFLUD24-XX-XX-XXXX.csv   ← coloque aqui
-```
-
-### 1. Backend (Servidor de Inteligência)
-Abra o seu terminal na raiz do projeto (`A3-IA`) e configure o ambiente Python:
-```bash
-# 1. Crie um ambiente virtual (somente na primeira vez)
+# 1. Crie e ative um ambiente virtual (somente na primeira vez)
 python -m venv venv
 
-# 2. Ative o ambiente virtual
-# No Linux/Mac:
-source venv/bin/activate
 # No Windows:
 venv\Scripts\activate
+# (Se estiver no Linux/Mac use: source venv/bin/activate)
 
-# 3. Instale as dependências de IA (Pandas, Scikit-Learn e FastAPI)
+# 2. Instale as dependências da Inteligência Artificial
 pip install -r backend/requirements.txt
 
-# 4. Levante a API
+# 3. Levante a API
 uvicorn backend.api:app --reload
 ```
 A API Python acordará na porta local `8000`.
 
-### 2. Frontend (Aplicação Visual)
-Em uma **NOVA aba de terminal** (mantenha o Backend ligado no anterior), vá para a pasta frontend e sirva o website:
+### 3. Frontend (Dashboard Visual em Streamlit)
+Em uma **NOVA aba de terminal** (mantenha o Backend ligado no anterior), instale as dependências visuais e rode a interface:
+
 ```bash
-cd frontend
+# Lembre-se de ativar o ambiente virtual no novo terminal também
+venv\Scripts\activate 
 
-# 1. Instale os pacotes NodeJS (somente na primeira vez)
-npm install
-
-# 2. Acorde o app web local
-npm run dev
+# 1. Inicie o painel interativo do Streamlit
+cd streamlit
+streamlit run app.py
 ```
-A página final do programa ficará disponível para você clicar no seu terminal, normalmente em `http://localhost:5173/`.
+A página do dashboard médico com o modelo 3D ficará disponível no seu navegador (normalmente em `http://localhost:8501/`).
 
 ## 🧠 Lógica e Aprendizado
-*   **Aprendizado (Treinamento)**: Ao acessar a Interface rodando no seu navegador, clique no botão de Treinamento. O Backend em Python usará o Pandas para engolir instantaneamente o Dataset local hospedado no servidor, extraindo o Alvo (O paciente precisou de UTI ou Intubação?) e treinando o algoritmo na memória.
-*   **Inferência (Diagnóstico)**: Responda as perguntas simulando um novo paciente e obtenha uma medição imediata da rede de Machine Learning (em %) indicando qual seria o desfecho provável deste paciente, guiando as prioridades médicas.
+*   **Aprendizado e Cache Dinâmico**: Ao abrir o dashboard, o Streamlit fará uma requisição ao Backend. O Backend baixará os dados do Supabase paginados de forma progressiva (até limite estabelecido), extrairá as *features* limpas com Pandas e treinará o modelo `LogisticRegression` em memória. Este treinamento é **salvo localmente** e a chamada de rede do frontend ganha um **cache de 3 horas**, resultando em respostas quase instatâneas nas próximas visitas.
+*   **Inferência Médica Visual**: Responda as perguntas no dashboard. Os órgãos 3D correspondentes (pulmões, coração, garganta) acenderão com efeitos de "Glow", simulando o mapeamento termográfico e inflamatório do corpo. Simultaneamente, o Frontend consome o Backend e exibe o "Nível de Risco" (em %) de complicação (Internação/UTI/Óbito), auxiliando visualmente a triagem de pacientes de alto risco.
 
 ---
 *Projeto idealizado para a disciplina e atividade prática em Inteligência Artificial (A3)*
