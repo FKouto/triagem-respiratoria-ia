@@ -1,7 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+# pyrefly: ignore [missing-import]
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from backend.model import obeter_dados_e_treinar, prever_gravidade, get_stats
+from backend.model import obter_dados_e_treinar, prever_gravidade, get_stats
 
 app = FastAPI(title="Triagem Respiratória IA - Backend")
 
@@ -25,19 +26,11 @@ class PatientFeatures(BaseModel):
     diabetes: bool
     cardiopatia: bool
 
-import glob
-
 @app.post("/train")
-async def train_model():
-    """Lê o CSV da pasta dataset local e treina a Inteligência Artificial"""
-    csv_files = glob.glob("dataset/*.csv")
-    if not csv_files:
-        raise HTTPException(400, "Nenhum arquivo CSV encontrado na pasta 'dataset'.")
-        
-    file_path = csv_files[0]
-    
+def train_model():
+    """Lê os dados do banco Supabase e treina a Inteligência Artificial"""
     try:
-        accuracy, samples = obeter_dados_e_treinar(file_path)
+        accuracy, samples = obter_dados_e_treinar()
         return {"status": "success", "accuracy": accuracy, "samples": samples}
     except Exception as e:
         raise HTTPException(400, str(e))

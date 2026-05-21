@@ -1,27 +1,69 @@
+import os
 import pandas as pd
 import numpy as np
-from io import StringIO
+import requests
+import joblib
+from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
+
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "modelo_treinado.joblib")
 
 _modelo_treinado = None
 _accuracy = 0.0
 _samples = 0
 
-def obeter_dados_e_treinar(file_path: str):
+try:
+    if os.path.exists(MODEL_PATH):
+        dados_salvos = joblib.load(MODEL_PATH)
+        _modelo_treinado = dados_salvos["modelo"]
+        _accuracy = dados_salvos["accuracy"]
+        _samples = dados_salvos["samples"]
+except Exception as e:
+    print(f"Aviso: Não foi possível carregar o modelo salvo: {e}")
+
+load_dotenv()
+
+def obter_dados_e_treinar():
     global _modelo_treinado, _accuracy, _samples
     
-    # Carregar dados CSV usando Pandas. Evita erros de colunas sujas do DataSUS
-    try:
-        df = pd.read_csv(file_path, sep=';', dtype=str, encoding='utf-8')
-    except UnicodeDecodeError:
-        df = pd.read_csv(file_path, sep=';', dtype=str, encoding='latin-1')
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    if not url or not key:
+        raise ValueError("Configurações do Supabase (SUPABASE_URL ou SUPABASE_KEY) não encontradas no arquivo .env.")
+    
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}"
+    }
+    
+    all_data = []
+    limit = 1000
+    max_total = 50000
+    
+    for offset in range(0, max_total, limit):
+        endpoint = f"{url}/rest/v1/srag?select=*&limit={limit}&offset={offset}"
+        response = requests.get(endpoint, headers=headers, timeout=10)
+        
+        if not response.ok:
+            raise ValueError(f"Erro ao buscar do Supabase: {response.text}")
+            
+        data = response.json()
+        if not data:
+            break
+            
+        all_data.extend(data)
+        if len(data) < limit:
+            break
+            
+    df = pd.DataFrame(all_data)
     
     if len(df) < 2:
-        raise ValueError("Arquivo vazio ou inválido.")
+        raise ValueError("Tabela vazia ou com dados insuficientes no Supabase.")
         
     df.columns = df.columns.str.strip().str.upper()
     df = df.replace('"', '', regex=True)
     
+    # Nota: CARDIOPATI está sem o "A" final pois o DataSUS as vezes limita os nomes das colunas a 10 caracteres (formato DBF)
     feature_keys = ['FEBRE', 'TOSSE', 'GARGANTA', 'DISPNEIA', 'ASMA', 'DIABETES', 'CARDIOPATI', 'SATURACAO']
     
     X = []
@@ -38,21 +80,21 @@ def obeter_dados_e_treinar(file_path: str):
                 uti = int(float(str(row['UTI'])))
                 if uti in [1, 2]: has_valid_target = True
                 if uti == 1: is_grave = True
-            except: pass
+            except Exception: pass
             
         if 'EVOLUCAO' in row:
             try:
                 evo = int(float(str(row['EVOLUCAO'])))
                 if evo in [1, 2]: has_valid_target = True
                 if evo == 2: is_grave = True # Óbito
-            except: pass
+            except Exception: pass
             
         if 'SUPORT_VEN' in row:
             try:
                 sup = int(float(str(row['SUPORT_VEN'])))
                 if sup in [1, 2, 3]: has_valid_target = True
                 if sup in [1, 2]: is_grave = True # Precisou de suporte ventilatório
-            except: pass
+            except Exception: pass
             
         if not has_valid_target:
             continue
@@ -65,7 +107,7 @@ def obeter_dados_e_treinar(file_path: str):
                 nu_idade = int(float(row['NU_IDADE_N']))
                 if tp_idade == 3: idade_anos = nu_idade
                 elif tp_idade == 2: idade_anos = nu_idade / 12.0
-        except: pass
+        except Exception: pass
         
         if np.isnan(idade_anos) or idade_anos > 120:
             continue
@@ -79,7 +121,7 @@ def obeter_dados_e_treinar(file_path: str):
             try:
                 if feat in row:
                     val = int(float(str(row[feat])))
-            except: pass
+            except Exception: pass
             
             # Se for ignorado (9), a gente da discard na linha
             if val not in [1, 2]:
@@ -109,6 +151,16 @@ def obeter_dados_e_treinar(file_path: str):
     _accuracy = accuracy
     _samples = len(X)
     _modelo_treinado = clf
+    
+    # Salvar o modelo treinado localmente
+    try:
+        joblib.dump({
+            "modelo": _modelo_treinado,
+            "accuracy": _accuracy,
+            "samples": _samples
+        }, MODEL_PATH)
+    except Exception as e:
+        print(f"Aviso: Falha ao salvar o modelo: {e}")
     
     return _accuracy, _samples
 
