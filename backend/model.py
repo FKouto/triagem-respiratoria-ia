@@ -6,7 +6,7 @@ import joblib
 from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 
-MODEL_PATH = "modelo_treinado.joblib"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "modelo_treinado.joblib")
 
 _modelo_treinado = None
 _accuracy = 0.0
