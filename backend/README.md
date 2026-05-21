@@ -8,7 +8,7 @@
 
 ## 1. Visão Geral
 
-Este módulo implementa o **núcleo de aprendizado de máquina** da aplicação de triagem respiratória. Sua responsabilidade é receber um conjunto de dados brutos (CSV do DataSUS/SIVEP-Gripe), extrair as características clínicas relevantes de cada paciente, treinar um modelo de **Regressão Logística** e, posteriormente, utilizar o modelo treinado para estimar a probabilidade de um novo paciente apresentar um quadro respiratório grave.
+Este módulo implementa o **núcleo de aprendizado de máquina** da aplicação de triagem respiratória. Sua responsabilidade é buscar dados clínicos reais do **Supabase** (via REST API paginada), extrair as características clínicas relevantes de cada paciente, treinar um modelo de **Regressão Logística** e, posteriormente, utilizar o modelo treinado para estimar a probabilidade de um novo paciente apresentar um quadro respiratório grave. O modelo treinado é persistido em disco via `joblib` para evitar novo treinamento a cada reinício do servidor.
 
 ---
 
@@ -125,28 +125,49 @@ O algoritmo utilizado para minimizar L(w, b) neste projeto é o **L-BFGS** (*Lim
 ### 3.1 Importações e Estado Global
 
 ```python
+import os
 import pandas as pd
 import numpy as np
+import requests
+import joblib
+from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
+
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "modelo_treinado.joblib")
 
 _modelo_treinado = None
 _accuracy = 0.0
 _samples = 0
 ```
 
-O modelo treinado é **armazenado em memória** como variável global do módulo Python. Isso é viável pois o servidor FastAPI roda como processo único persistente — o modelo sobrevive entre as requisições HTTP sem precisar ser serializado em disco.
+O modelo treinado é **armazenado em memória** como variável global do módulo Python e **persistido em disco** via `joblib` (`modelo_treinado.joblib`). Na próxima inicialização do servidor, o arquivo é carregado automaticamente — evitando novo treinamento. As credenciais do Supabase são lidas do `.env` via `load_dotenv()`.
 
 ---
 
-### 3.2 Extração e Limpeza dos Dados (Feature Engineering)
+### 3.2 Extração e Limpeza dos Dados (Fonte: Supabase REST API)
+
+A função `obter_dados_e_treinar()` busca os dados diretamente do **Supabase** em lotes de 1.000 registros (até 50.000 no total):
 
 ```python
-def obeter_dados_e_treinar(file_path: str):
-    df = pd.read_csv(file_path, sep=';', dtype=str, encoding='utf-8')
+def obter_dados_e_treinar():
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+
+    all_data = []
+    for offset in range(0, 50000, 1000):
+        endpoint = f"{url}/rest/v1/srag?select=*&limit=1000&offset={offset}"
+        response = requests.get(endpoint, headers=headers, timeout=10)
+        data = response.json()
+        if not data: break
+        all_data.extend(data)
+        if len(data) < 1000: break
+
+    df = pd.DataFrame(all_data)
     df.columns = df.columns.str.strip().str.upper()
 ```
 
-O CSV do SIVEP-Gripe usa separador `;` e encoding `latin-1` (por ser sistema governamental legado). O Pandas normaliza todos os nomes de colunas para maiúsculas e remove espaços.
+Os dados chegam como JSON (lista de dicts) do Supabase. O Pandas normaliza os nomes de colunas para maiúsculas e remove espaços. Registros insuficientes (menos de 2 linhas) geram um `ValueError` imediatamente.
 
 #### 3.2.1 Definição da Variável Alvo (Target Y)
 
@@ -203,6 +224,9 @@ clf = LogisticRegression(
     max_iter=1000      # Iterações máximas de convergência
 )
 clf.fit(X, Y)
+
+# Persiste o modelo em disco para reutilização
+joblib.dump({"modelo": clf, "accuracy": clf.score(X, Y) * 100.0, "samples": len(X)}, MODEL_PATH)
 ```
 
 #### Parâmetro de Regularização C
@@ -235,34 +259,81 @@ Os coeficientes `w` aprendidos pelo modelo podem ser inspecionados via `clf.coef
 
 ---
 
+### 3.5 Persistência do Modelo (`joblib`)
+
+Após cada treinamento o modelo é salvo em `backend/modelo_treinado.joblib`. Na inicialização do servidor o arquivo é recarregado automaticamente:
+
+```python
+# Salvar
+joblib.dump({"modelo": clf, "accuracy": _accuracy, "samples": _samples}, MODEL_PATH)
+
+# Carregar (na inicialização)
+if os.path.exists(MODEL_PATH):
+    dados = joblib.load(MODEL_PATH)
+    _modelo_treinado = dados["modelo"]
+```
+
+---
+
+### 3.6 Endpoints da API (`api.py`)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `POST` | `/train` | Busca dados do Supabase e treina o modelo. Retorna `accuracy` e `samples`. |
+| `POST` | `/predict` | Recebe sintomas em JSON e retorna `probabilidadeGravidade` (%). |
+| `GET` | `/status` | Retorna se o modelo está treinado, acurácia atual e número de amostras. |
+
+**Payload do `/predict`:**
+```json
+{
+  "idade": 45,
+  "febre": true,
+  "tosse": true,
+  "dispneia": false,
+  "garganta": false,
+  "saturacao": false,
+  "asma": false,
+  "diabetes": false,
+  "cardiopatia": false
+}
+```
+
+**Resposta do `/predict`:**
+```json
+{ "probabilidadeGravidade": 32.7 }
+```
+
+---
+
 ## 4. Fluxo Completo do Sistema
 
 ```
-[Dataset CSV SIVEP-Gripe]
+[Supabase REST API — tabela `srag`]
+         │  (paginação: lotes de 1.000, até 50.000 registros)
+         ▼
+[DataFrame Pandas — normalização e limpeza de colunas]
          │
          ▼
-[Limpeza e Normalização - Pandas]
+[Extração de Features — 9 dimensões por paciente]
          │
          ▼
-[Extração de Features - 9 dimensões por paciente]
+[Definição do Target Y — {0: Leve, 1: Grave}]
          │
          ▼
-[Definição do Target Y - {0: Leve, 1: Grave}]
-         │
-         ▼
-[Treinamento LogisticRegression - Scikit-Learn]
+[Treinamento LogisticRegression — Scikit-Learn]
     Otimizador: L-BFGS
     Perda: Entropia Cruzada Binária
     Regularização: L2 (C=1.0)
          │
-         ▼
-[Modelo em Memória - _modelo_treinado]
+         ├─── Memória: _modelo_treinado (variável global)
+         │
+         └─── Disco: modelo_treinado.joblib (joblib)
          │
          ▼
 [Inferência: P(Grave|x) = σ(wᵀx + b)]
          │
          ▼
-[API FastAPI retorna % de risco ao Frontend]
+[API FastAPI retorna % de risco ao Dashboard Streamlit]
 ```
 
 ---
