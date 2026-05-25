@@ -67,68 +67,98 @@ footer {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   HEADER PREMIUM
+   TOP BAR (autenticado)
 ══════════════════════════════════════════════════════════════ */
-.med-header {
-    display: flex;
-    align-items: center;
-
-    gap: 18px;
-
-    padding: 22px 28px;
-
-    margin-bottom: 30px;
-
-    border-radius: 24px;
-
-    background:
-        rgba(255,255,255,0.78);
-
-    border:
-        1px solid rgba(148,163,184,0.12);
-
-    backdrop-filter: blur(18px);
-
-    box-shadow:
-        0 8px 30px rgba(15,23,42,0.05);
+div.st-key-topbar {
+    background: rgba(255,255,255,0.78) !important;
+    border: 1px solid rgba(148,163,184,0.12) !important;
+    border-radius: 24px !important;
+    backdrop-filter: blur(18px) !important;
+    box-shadow: 0 8px 30px rgba(15,23,42,0.05) !important;
+    padding: 14px 20px !important;
+    margin-bottom: 30px !important;
 }
 
-.med-header-icon {
-    font-size: 34px;
+/* Remover gaps adicionais de blocos verticais do streamlit */
+div.st-key-topbar [data-testid="stVerticalBlock"] {
+    gap: 0px !important;
+}
 
-    background:
-        linear-gradient(
-            135deg,
-            #2563eb,
-            #0ea5e9
-        );
+/* Alinhar colunas verticalmente dentro da topbar */
+div.st-key-topbar [data-testid="stHorizontalBlock"] {
+    align-items: center !important;
+}
 
+/* Alinhar o email à direita dentro de sua coluna */
+div.st-key-topbar [data-testid="stHorizontalBlock"] > div:nth-child(2) {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Botão Sair dentro da topbar */
+div.st-key-topbar [data-testid="stButton"] > button {
+    min-height: 38px !important;
+    font-size: 0.82rem !important;
+    border-radius: 12px !important;
+    background: rgba(239,68,68,0.08) !important;
+    color: #dc2626 !important;
+    border: 1px solid rgba(239,68,68,0.18) !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+    margin-top: 0px !important;
+}
+
+div.st-key-topbar [data-testid="stButton"] > button:hover {
+    background: rgba(239,68,68,0.14) !important;
+    transform: none !important;
+}
+
+.topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.topbar-icon {
+    font-size: 30px;
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
-.med-header-title {
+.topbar-title {
     margin: 0;
-
     font-size: 1.05rem;
     font-weight: 700;
-
     color: #0f172a;
-
     letter-spacing: -0.03em;
 }
 
-.med-header-sub {
+.topbar-sub {
     margin: 0;
-    margin-top: 4px;
-
-    font-size: 0.78rem;
-
+    margin-top: 2px;
+    font-size: 0.72rem;
     color: #64748b;
-
     font-family: 'JetBrains Mono', monospace;
-
     letter-spacing: 0.04em;
+}
+
+.topbar-user {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(37,99,235,0.06);
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(37,99,235,0.10);
+    margin-top: 0px !important;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -924,10 +954,137 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
         font-size: 2.2rem;
     }
 
-    .med-header {
-        flex-direction: column;
-        align-items: flex-start;
+    .topbar-wrapper {
+        border-radius: 16px;
     }
+
+    .login-title {
+        font-size: 2rem;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOGIN / CADASTRO
+══════════════════════════════════════════════════════════════ */
+.login-wrapper {
+    text-align: center;
+
+    padding: 50px 20px 30px;
+}
+
+.login-icon {
+    font-size: 3.5rem;
+
+    margin-bottom: 14px;
+
+    background:
+        linear-gradient(135deg, #2563eb, #0ea5e9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.login-title {
+    font-size: 2.6rem;
+
+    font-weight: 800;
+
+    letter-spacing: -0.06em;
+
+    color: #0f172a;
+
+    margin-bottom: 8px;
+}
+
+.login-subtitle {
+    font-size: 0.78rem;
+
+    color: #64748b;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    letter-spacing: 0.04em;
+}
+
+/* Tabs de Login/Cadastro */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    gap: 0 !important;
+
+    background: rgba(255,255,255,0.6);
+
+    border-radius: 14px;
+
+    padding: 4px;
+
+    border: 1px solid rgba(148,163,184,0.12);
+}
+
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    border-radius: 10px !important;
+
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+
+    color: #64748b !important;
+
+    padding: 10px 24px !important;
+
+    transition: all 0.2s ease;
+}
+
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
+    background: white !important;
+
+    color: #2563eb !important;
+
+    box-shadow: 0 2px 8px rgba(37,99,235,0.10);
+}
+
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+
+[data-testid="stTabs"] [data-baseweb="tab-border"] {
+    display: none !important;
+}
+
+/* Form inputs na tela de login */
+[data-testid="stForm"] {
+    background: rgba(255,255,255,0.82);
+
+    border: 1px solid rgba(148,163,184,0.12);
+
+    border-radius: 22px;
+
+    padding: 28px 24px;
+
+    backdrop-filter: blur(14px);
+
+    box-shadow: 0 8px 28px rgba(15,23,42,0.05);
+}
+
+[data-testid="stForm"] [data-testid="stTextInput"] label {
+    color: #334155 !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+}
+
+[data-testid="stForm"] [data-testid="stTextInput"] input {
+    border-radius: 12px !important;
+
+    border: 1px solid rgba(148,163,184,0.22) !important;
+
+    padding: 10px 14px !important;
+
+    font-size: 0.95rem !important;
+
+    font-family: 'Inter', sans-serif !important;
+}
+
+[data-testid="stForm"] [data-testid="stTextInput"] input:focus {
+    border-color: #2563eb !important;
+
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.10) !important;
 }
 
 [data-testid="stToolbar"] {
