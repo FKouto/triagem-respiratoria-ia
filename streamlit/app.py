@@ -15,8 +15,15 @@ def _secret(key: str, default: str) -> str:
     except Exception:
         return default
 
-API_BASE     = _secret("API_BASE",     "http://localhost:8000")
-TRAIN_SECRET = _secret("TRAIN_SECRET", "")
+API_BASE      = _secret("API_BASE",      "http://localhost:8000")
+TRAIN_SECRET  = _secret("TRAIN_SECRET",  "")
+SUPABASE_URL  = _secret("SUPABASE_URL",  "")
+SUPABASE_KEY  = _secret("SUPABASE_KEY",  "")
+
+AUTH_HEADERS  = {
+    "apikey":        SUPABASE_KEY,
+    "Content-Type":  "application/json",
+}
 
 
 # ── Config da página ──────────────────────────────────────────
@@ -38,21 +45,212 @@ _load_css(os.path.join(os.path.dirname(__file__), "style.css"))
 
 
 # ── Estado da sessão ──────────────────────────────────────────
-for key, default in [("step", "train"), ("trainedModel", None), ("resultado", None)]:
+if "user" not in st.session_state or st.session_state.user is None:
+    cookie_val = st.context.cookies.get("medtriagem_user")
+    if cookie_val:
+        try:
+            import urllib.parse
+            import json
+            decoded = urllib.parse.unquote(cookie_val)
+            st.session_state["user"] = json.loads(decoded)
+        except Exception:
+            pass
+
+defaults = {
+    "user":         None,   # dict com email e token quando logado
+    "step":         "train",
+    "trainedModel": None,
+    "resultado":    None,
+}
+for key, default in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
 
-# ── Header global (todas as telas) ───────────────────────────
-st.markdown("""
-<div class="med-header">
-    <span class="med-header-icon">🩺</span>
-    <div>
-        <p class="med-header-title">MedTriagem IA</p>
-        <p class="med-header-sub">Triagem Respiratória · SIVEP-Gripe · DataSUS</p>
+# ══════════════════════════════════════════════════════════════
+# AUTENTICAÇÃO — Supabase Auth REST API
+# ══════════════════════════════════════════════════════════════
+
+def _set_user_cookie(user_data: dict):
+    """Grava o cookie no navegador e recarrega a página pai."""
+    import urllib.parse
+    import json
+    import streamlit.components.v1 as components
+    val = urllib.parse.quote(json.dumps(user_data))
+    js_code = f"""
+    <script>
+        var date = new Date();
+        date.setTime(date.getTime() + (7 * 24 * 60 * 60 * 1000));
+        var expires = "; expires=" + date.toUTCString();
+        window.parent.document.cookie = "medtriagem_user=" + "{val}" + expires + "; path=/; SameSite=Lax";
+        window.parent.location.reload();
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+
+def _delete_user_cookie():
+    """Remove o cookie do navegador e recarrega a página pai."""
+    import streamlit.components.v1 as components
+    js_code = """
+    <script>
+        window.parent.document.cookie = "medtriagem_user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
+        window.parent.location.reload();
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+
+def _supabase_login(email: str, password: str) -> dict:
+    """Autentica via POST /auth/v1/token?grant_type=password."""
+    resp = requests.post(
+        f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+        headers=AUTH_HEADERS,
+        json={"email": email, "password": password},
+        timeout=10,
+    )
+    return resp.json(), resp.status_code
+
+
+def _supabase_signup(email: str, password: str) -> dict:
+    """Cadastra via POST /auth/v1/signup."""
+    resp = requests.post(
+        f"{SUPABASE_URL}/auth/v1/signup",
+        headers=AUTH_HEADERS,
+        json={"email": email, "password": password},
+        timeout=10,
+    )
+    return resp.json(), resp.status_code
+
+
+def _error_msg(data: dict) -> str:
+    """Extrai a mensagem de erro da resposta do Supabase e traduz."""
+    raw = data.get("error_description") or data.get("msg") or data.get("message", "")
+    translations = {
+        "Invalid login credentials":         "Email ou senha incorretos.",
+        "User already registered":           "Este email já está cadastrado.",
+        "Password should be at least 6 characters":
+            "A senha deve ter no mínimo 6 caracteres.",
+        "Unable to validate email address: invalid format":
+            "Formato de email inválido.",
+    }
+    return translations.get(raw, raw or "Erro desconhecido.")
+
+
+def do_logout():
+    """Limpa toda a sessão e volta para o login."""
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    _delete_user_cookie()
+
+
+# ══════════════════════════════════════════════════════════════
+# TELA: LOGIN / CADASTRO
+# ══════════════════════════════════════════════════════════════
+
+if st.session_state.user is None:
+
+    st.markdown("""
+    <div class="login-wrapper">
+        <div class="login-icon">🩺</div>
+        <div class="login-title">MedTriagem IA</div>
+        <div class="login-subtitle">Triagem Respiratória · SIVEP-Gripe · DataSUS</div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+    tab_login, tab_signup = st.tabs(["🔑 Entrar", "📝 Criar Conta"])
+
+    # ── Tab: Login ────────────────────────────────────────────
+    with tab_login:
+        with st.form("login_form"):
+            email_login = st.text_input("Email", placeholder="seu@email.com", key="login_email")
+            senha_login = st.text_input("Senha", type="password", placeholder="••••••••", key="login_senha")
+            submit_login = st.form_submit_button("Entrar", type="primary", use_container_width=True)
+
+        if submit_login:
+            if not email_login or not senha_login:
+                st.error("Preencha email e senha.")
+            else:
+                with st.spinner("Autenticando..."):
+                    data, status = _supabase_login(email_login, senha_login)
+                if status == 200 and "access_token" in data:
+                    user_email = data.get("user", {}).get("email", email_login)
+                    st.session_state.user = {
+                        "email": user_email,
+                        "token": data["access_token"],
+                    }
+                    _set_user_cookie(st.session_state.user)
+                else:
+                    st.error(_error_msg(data))
+
+    # ── Tab: Cadastro ─────────────────────────────────────────
+    with tab_signup:
+        with st.form("signup_form"):
+            email_signup  = st.text_input("Email", placeholder="seu@email.com", key="signup_email")
+            senha_signup  = st.text_input("Senha", type="password", placeholder="Mínimo 6 caracteres", key="signup_senha")
+            senha_confirm = st.text_input("Confirmar Senha", type="password", placeholder="Repita a senha", key="signup_confirm")
+            submit_signup = st.form_submit_button("Criar Conta", type="primary", use_container_width=True)
+
+        if submit_signup:
+            if not email_signup or not senha_signup:
+                st.error("Preencha todos os campos.")
+            elif senha_signup != senha_confirm:
+                st.error("As senhas não coincidem.")
+            elif len(senha_signup) < 6:
+                st.error("A senha deve ter no mínimo 6 caracteres.")
+            else:
+                with st.spinner("Criando conta..."):
+                    data, status = _supabase_signup(email_signup, senha_signup)
+                if status in (200, 201) and data.get("id"):
+                    st.success("✅ Conta criada com sucesso! Faça login na aba **Entrar**.")
+                elif status in (200, 201) and data.get("access_token"):
+                    user_email = data.get("user", {}).get("email", email_signup)
+                    st.session_state.user = {
+                        "email": user_email,
+                        "token": data["access_token"],
+                    }
+                    _set_user_cookie(st.session_state.user)
+                else:
+                    st.error(_error_msg(data))
+
+    st.markdown("""
+    <div class="med-caption">
+        ⚕️ Ferramenta de apoio clínico — não substitui avaliação médica presencial.<br>
+        Dados: SIVEP-Gripe (DataSUS) · Modelo: Regressão Logística (Scikit-Learn) · Backend: FastAPI
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.stop()
+
+
+# ══════════════════════════════════════════════════════════════
+# ÁREA AUTENTICADA (todo o fluxo original abaixo)
+# ══════════════════════════════════════════════════════════════
+
+# ── Top bar (todas as telas) ──────────────────────────────────
+user_email = st.session_state.user["email"]
+
+with st.container(key="topbar"):
+    col_logo, col_email, col_sair = st.columns([5, 3, 1])
+    with col_logo:
+        st.markdown(
+            '<div class="topbar-logo">'
+            '<span class="topbar-icon">🩺</span>'
+            '<div>'
+            '<p class="topbar-title">MedTriagem IA</p>'
+            '<p class="topbar-sub">Triagem Respiratória · SIVEP-Gripe · DataSUS</p>'
+            '</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    with col_email:
+        st.markdown(
+            f'<div class="topbar-user">👤 {user_email}</div>',
+            unsafe_allow_html=True,
+        )
+    with col_sair:
+        if st.button("Sair", key="btn_logout"):
+            do_logout()
 
 if st.session_state.trainedModel:
     m = st.session_state.trainedModel
