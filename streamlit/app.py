@@ -165,7 +165,17 @@ elif st.session_state.step == "form":
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="form-section-title">Dados Básicos</div>', unsafe_allow_html=True)
-    idade = st.slider("Idade do Paciente (anos)", 0, 100, 45)
+    col_input, col_badge = st.columns([4, 1])
+    with col_input:
+        idade = st.number_input("Idade do Paciente (anos)", min_value=0, max_value=120, value=45, step=1)
+    with col_badge:
+        st.markdown(
+            f'<div class="idade-badge">'
+            f'<span class="idade-valor">{idade}</span>'
+            f'<span class="idade-label">anos</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<div class="form-section-title">Sintomas Principais</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
