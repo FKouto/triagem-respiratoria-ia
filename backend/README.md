@@ -1,6 +1,6 @@
 # Documentação Técnica: Módulo de Inteligência Artificial
 
-**Arquivo:** `model.py`  
+**Arquivos:** `model.py`, `api.py`  
 **Projeto:** Triagem Respiratória IA — A3 Inteligência Artificial  
 **Instituição:** [Faculdade]  
 
@@ -116,13 +116,14 @@ O algoritmo utilizado para minimizar L(w, b) neste projeto é o **L-BFGS** (*Lim
 | Otimizador | Gradiente Descendente Manual | L-BFGS (quasi-Newton) |
 | Função de perda | Erro quadrático implícito | Entropia Cruzada Binária |
 | Regularização | Nenhuma | L2 (Ridge) com C=1.0 |
+| Balanceamento de classes | Nenhum | `class_weight='balanced'` |
 | Convergência | Lenta, pode oscilar | Rápida e estável |
 
 ---
 
 ## 3. Explicação do Código (`model.py`)
 
-### 3.1 Importações e Estado Global
+### 3.1 Importações, Constantes e Estado Global
 
 ```python
 import os
@@ -132,13 +133,21 @@ import requests
 import joblib
 from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "modelo_treinado.joblib")
 
+# Ordem canônica das features — usada no treino E na predição (via api.py).
+# Qualquer alteração aqui deve ser refletida em api.py e vice-versa.
+FEATURE_KEYS = ['FEBRE', 'TOSSE', 'GARGANTA', 'DISPNEIA', 'ASMA', 'DIABETES', 'CARDIOPATI', 'SATURACAO']
+
 _modelo_treinado = None
-_accuracy = 0.0
-_samples = 0
+_accuracy        = 0.0
+_samples         = 0
 ```
+
+`FEATURE_KEYS` é definida como **constante exportável no topo do módulo**, sendo a única fonte de verdade para a ordem das features — tanto no treinamento quanto na predição. Isso elimina o risco de mismatch entre `model.py` e `api.py`.
 
 O modelo treinado é **armazenado em memória** como variável global do módulo Python e **persistido em disco** via `joblib` (`modelo_treinado.joblib`). Na próxima inicialização do servidor, o arquivo é carregado automaticamente — evitando novo treinamento. As credenciais do Supabase são lidas do `.env` via `load_dotenv()`.
 
@@ -169,6 +178,8 @@ def obter_dados_e_treinar():
 
 Os dados chegam como JSON (lista de dicts) do Supabase. O Pandas normaliza os nomes de colunas para maiúsculas e remove espaços. Registros insuficientes (menos de 2 linhas) geram um `ValueError` imediatamente.
 
+A lógica de extração de features foi isolada na função `_extrair_features(df)`, separando responsabilidades e facilitando testes unitários futuros.
+
 #### 3.2.1 Definição da Variável Alvo (Target Y)
 
 A variável alvo **Y** é binária: `1` para **Quadro Grave**, `0` para **Quadro Leve/Moderado**.
@@ -188,12 +199,14 @@ Esta definição segue o **Dicionário de Dados do SIVEP-Gripe** publicado pelo 
 
 #### 3.2.2 Definição do Vetor de Features (X)
 
-As features foram escolhidas por sua relevância clínica em quadros respiratórios agudos, conforme literatura médica:
+As features foram escolhidas por sua relevância clínica em quadros respiratórios agudos, conforme literatura médica, e seguem exatamente a ordem definida em `FEATURE_KEYS`:
 
 ```python
-feature_keys = ['FEBRE', 'TOSSE', 'GARGANTA', 'DISPNEIA',
+FEATURE_KEYS = ['FEBRE', 'TOSSE', 'GARGANTA', 'DISPNEIA',
                 'ASMA', 'DIABETES', 'CARDIOPATI', 'SATURACAO']
 ```
+
+> **Nota:** `CARDIOPATI` está sem o "A" final pois o DataSUS limita nomes de colunas a 10 caracteres no formato DBF.
 
 Cada feature é **binarizada**: `1` (presente) ou `0` (ausente). O padrão DataSUS usa `1 = Sim`, `2 = Não`, e `9 = Ignorado`. Registros com valor `9` são **descartados** para não introduzir ruído no treinamento.
 
@@ -216,18 +229,49 @@ x = [febre, tosse, garganta, dispneia, asma, diabetes, cardiopatia, saturacao, i
 
 ### 3.3 Treinamento do Modelo
 
+#### 3.3.1 Divisão Treino / Teste (80/20)
+
+```python
+X_train, X_test, Y_train, Y_test = train_test_split(
+    X, Y, test_size=0.2, random_state=42, stratify=Y
+)
+```
+
+O conjunto de dados é dividido em **80% para treino** e **20% para teste** antes do ajuste do modelo. O parâmetro `stratify=Y` garante que a proporção entre casos leves e graves seja preservada em ambos os conjuntos — essencial dado o desbalanceamento natural dos dados do SIVEP-Gripe.
+
+Esta divisão garante que a **acurácia reportada seja avaliada em dados não vistos durante o treino**, tornando a métrica honesta e representativa do desempenho real do modelo.
+
+#### 3.3.2 Balanceamento de Classes
+
 ```python
 clf = LogisticRegression(
-    random_state=42,   # Semente aleatória para reprodutibilidade
-    C=1.0,             # Inverso da força de regularização L2
-    solver='lbfgs',    # Otimizador quasi-Newton
-    max_iter=1000      # Iterações máximas de convergência
+    random_state=42,          # Semente aleatória para reprodutibilidade
+    C=1.0,                    # Inverso da força de regularização L2
+    solver='lbfgs',           # Otimizador quasi-Newton
+    max_iter=1000,            # Iterações máximas de convergência
+    class_weight='balanced'   # Compensação do desbalanceamento de classes
 )
-clf.fit(X, Y)
-
-# Persiste o modelo em disco para reutilização
-joblib.dump({"modelo": clf, "accuracy": clf.score(X, Y) * 100.0, "samples": len(X)}, MODEL_PATH)
+clf.fit(X_train, Y_train)
 ```
+
+O parâmetro `class_weight='balanced'` faz com que o modelo atribua **pesos inversamente proporcionais à frequência de cada classe**. Nos dados do SIVEP-Gripe, casos graves são naturalmente minoria — sem esse ajuste, o modelo tenderia a classificar quase tudo como leve, obtendo acurácia numericamente alta mas clinicamente inútil.
+
+O peso de cada classe é calculado automaticamente como:
+
+```
+wₖ = N / (K · Nₖ)
+```
+
+Onde N = total de amostras, K = número de classes (2), Nₖ = amostras da classe k.
+
+#### 3.3.3 Avaliação no Conjunto de Teste
+
+```python
+Y_pred   = clf.predict(X_test)
+accuracy = accuracy_score(Y_test, Y_pred) * 100.0
+```
+
+A acurácia é calculada via `accuracy_score` do scikit-learn **exclusivamente sobre o conjunto de teste** — dados que o modelo nunca viu durante o treinamento. Isso substitui a abordagem anterior (`clf.score(X, Y)`), que avaliava o modelo nos próprios dados de treino, produzindo métricas artificialmente infladas.
 
 #### Parâmetro de Regularização C
 
@@ -244,7 +288,7 @@ A regularização **evita overfitting** — o fenômeno em que o modelo memoriza
 ### 3.4 Inferência (Predição)
 
 ```python
-def prever_gravidade(features_list):
+def prever_gravidade(features_list: list) -> float:
     proba = _modelo_treinado.predict_proba([features_list])[0]
     return float(proba[1] * 100.0)
 ```
@@ -277,13 +321,38 @@ if os.path.exists(MODEL_PATH):
 
 ### 3.6 Endpoints da API (`api.py`)
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| `POST` | `/train` | Busca dados do Supabase e treina o modelo. Retorna `accuracy` e `samples`. |
-| `POST` | `/predict` | Recebe sintomas em JSON e retorna `probabilidadeGravidade` (%). |
-| `GET` | `/status` | Retorna se o modelo está treinado, acurácia atual e número de amostras. |
+| Método | Rota | Autenticação | Descrição |
+|--------|------|-------------|-----------|
+| `POST` | `/train` | Header `X-Train-Secret` | Busca dados do Supabase e treina o modelo. Retorna `accuracy` e `samples`. |
+| `POST` | `/predict` | Nenhuma | Recebe sintomas em JSON e retorna probabilidade, classificação e limiares. |
+| `GET` | `/status` | Nenhuma | Retorna se o modelo está treinado, acurácia atual e número de amostras. |
 
-**Payload do `/predict`:**
+#### Segurança do `/train`
+
+O endpoint de treinamento é protegido por um header secreto configurado via variável de ambiente:
+
+```python
+TRAIN_SECRET = os.environ.get("TRAIN_SECRET", "")
+
+@app.post("/train")
+def train_model(x_train_secret: str = Header(default="")):
+    if TRAIN_SECRET and x_train_secret != TRAIN_SECRET:
+        raise HTTPException(403, "Acesso não autorizado ao endpoint de treinamento.")
+```
+
+Sem essa proteção, qualquer requisição externa poderia disparar um retreinamento completo do modelo.
+
+#### CORS Configurável
+
+As origens permitidas são configuradas via variável de ambiente, evitando o `allow_origins=["*"]` em produção:
+
+```python
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
+```
+
+#### Payload do `/predict`
+
 ```json
 {
   "idade": 45,
@@ -298,14 +367,36 @@ if os.path.exists(MODEL_PATH):
 }
 ```
 
-**Resposta do `/predict`:**
+#### Resposta do `/predict`
+
 ```json
-{ "probabilidadeGravidade": 32.7 }
+{
+  "probabilidadeGravidade": 32.7,
+  "classificacao": "moderado",
+  "limiares": {
+    "grave": 60.0,
+    "moderado": 30.0
+  }
+}
 ```
+
+A resposta agora inclui `classificacao` (rótulo textual) e `limiares` (thresholds usados), centralizando toda a lógica de decisão clínica no backend. O frontend apenas exibe o que recebe, sem recalcular nada.
 
 ---
 
-## 4. Fluxo Completo do Sistema
+## 4. Variáveis de Ambiente (`.env`)
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `SUPABASE_URL` | ✅ | URL do projeto Supabase |
+| `SUPABASE_KEY` | ✅ | Chave de acesso da API Supabase |
+| `TRAIN_SECRET` | ✅ | Segredo para autenticar o endpoint `/train` |
+| `ALLOWED_ORIGINS` | ❌ | Origens CORS permitidas (padrão: `*`) |
+| `API_BASE` | ❌ | URL base do backend usada pelo frontend (padrão: `http://localhost:8000`) |
+
+---
+
+## 5. Fluxo Completo do Sistema
 
 ```
 [Supabase REST API — tabela `srag`]
@@ -314,31 +405,42 @@ if os.path.exists(MODEL_PATH):
 [DataFrame Pandas — normalização e limpeza de colunas]
          │
          ▼
-[Extração de Features — 9 dimensões por paciente]
+[_extrair_features(df) — lógica isolada]
+    ├── Definição do Target Y: {0: Leve, 1: Grave}
+    │   (UTI=1 | EVOLUCAO=2 | SUPORT_VEN∈{1,2})
+    └── Vetor X: 9 dimensões por paciente
+        (FEATURE_KEYS + idade/100)
          │
          ▼
-[Definição do Target Y — {0: Leve, 1: Grave}]
+[train_test_split — 80% treino / 20% teste, stratify=Y]
          │
          ▼
 [Treinamento LogisticRegression — Scikit-Learn]
     Otimizador: L-BFGS
     Perda: Entropia Cruzada Binária
     Regularização: L2 (C=1.0)
+    Balanceamento: class_weight='balanced'
+         │
+         ▼
+[Avaliação: accuracy_score(Y_test, Y_pred)]
+    ← Acurácia medida em dados NÃO vistos no treino
          │
          ├─── Memória: _modelo_treinado (variável global)
-         │
          └─── Disco: modelo_treinado.joblib (joblib)
          │
          ▼
 [Inferência: P(Grave|x) = σ(wᵀx + b)]
          │
          ▼
-[API FastAPI retorna % de risco ao Dashboard Streamlit]
+[API FastAPI retorna probabilidade + classificação + limiares]
+         │
+         ▼
+[Dashboard Streamlit exibe resultado ao usuário]
 ```
 
 ---
 
-## 5. Relação com o Perceptron Original
+## 6. Relação com o Perceptron Original
 
 O código JavaScript original implementava **manualmente** um Perceptron com sigmoide e gradiente descendente:
 
@@ -351,16 +453,19 @@ A mudança **não é conceitual** — o modelo matemático é o mesmo. O que mud
 1. **O otimizador**: De gradiente descendente ingênuo para L-BFGS, que converge mais rapidamente e de forma mais estável.
 2. **A função de perda**: Formalizada como entropia cruzada, com garantias matemáticas de convexidade.
 3. **A regularização**: Adicionada via parâmetro `C`, prevenindo overfitting.
-4. **A robustez**: A biblioteca `scikit-learn` lida com casos de borda numérica (overflow de `e^z`, etc.) que o código JS ignorava.
+4. **O balanceamento**: `class_weight='balanced'` compensa a desproporção entre casos leves e graves.
+5. **A avaliação**: Separação treino/teste garante métricas honestas e representativas.
+6. **A robustez**: A biblioteca `scikit-learn` lida com casos de borda numérica (overflow de `e^z`, etc.) que o código JS ignorava.
 
 Em essência, a Regressão Logística do `scikit-learn` é um **Perceptron com sigmoide otimizado por décadas de pesquisa em otimização numérica**.
 
 ---
 
-## 6. Referências
+## 7. Referências
 
 - Rosenblatt, F. (1958). *The Perceptron: A Probabilistic Model for Information Storage and Organization in the Brain*. Psychological Review, 65(6), 386–408.
 - Bishop, C. M. (2006). *Pattern Recognition and Machine Learning*. Springer. Cap. 4 (Linear Models for Classification).
 - Nocedal, J., & Wright, S. J. (2006). *Numerical Optimization* (2nd ed.). Springer. Cap. 7 (Large-Scale Unconstrained Optimization — L-BFGS).
 - Ministério da Saúde do Brasil. *Dicionário de Dados SIVEP-Gripe*. DATASUS, 2023.
 - Scikit-learn Developers. *sklearn.linear\_model.LogisticRegression*. https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+- Scikit-learn Developers. *sklearn.model\_selection.train\_test\_split*. https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html
