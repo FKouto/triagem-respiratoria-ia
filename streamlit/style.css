@@ -463,27 +463,79 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
    INPUTS
 ══════════════════════════════════════════════════════════════ */
 
-/* Slider */
-[data-testid="stSlider"] {
-    padding-top: 10px;
+/* Number input (idade) */
+[data-testid="stNumberInput"] {
+    padding: 14px 18px 10px;
+    background: rgba(255,255,255,0.78);
+    border: 1px solid rgba(148,163,184,0.12);
+    border-radius: 18px;
+    margin-bottom: 8px;
 }
 
-[data-testid="stSlider"] label {
+[data-testid="stNumberInput"] label {
     color: #334155 !important;
-
     font-size: 0.92rem !important;
-
     font-weight: 600 !important;
 }
 
-[data-testid="stSlider"] > div > div > div > div {
+[data-testid="stNumberInput"] input {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    color: #0f172a !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(148,163,184,0.22) !important;
+    padding: 10px 14px !important;
+}
+
+[data-testid="stNumberInput"] input:focus {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.10) !important;
+}
+
+/* Idade badge (ao lado do slider) */
+.idade-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    height: 100%;
+    min-height: 90px;
+
+    padding: 14px 10px;
+
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(37,99,235,0.12);
+    border-radius: 20px;
+
+    box-shadow: 0 4px 16px rgba(37,99,235,0.06);
+}
+
+.idade-valor {
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: -0.06em;
+    line-height: 1;
+
+    font-family: 'JetBrains Mono', monospace;
 
     background:
-        linear-gradient(
-            90deg,
-            #2563eb,
-            #0ea5e9
-        ) !important;
+        linear-gradient(135deg, #2563eb, #0ea5e9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.idade-label {
+    margin-top: 4px;
+
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 /* Checkbox */
