@@ -30,6 +30,12 @@ htmlcov/
 # MyPy
 .mypy_cache/
 
+# ─── Modelo de IA (artefato gerado — não versionar) ───────
+# Gerado automaticamente pelo treinamento via /train.
+# Pode ter dezenas de MB e é reproduzível a qualquer momento.
+backend/modelo_treinado.joblib
+*.joblib
+
 # ─── Dataset (NÃO subir ao GitHub - arquivo muito grande) ──
 # O dataset CSV do DataSUS/SIVEP-Gripe deve ser obtido
 # diretamente em: https://opendatasus.saude.gov.br/
