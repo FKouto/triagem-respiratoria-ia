@@ -1,6 +1,8 @@
 import os
 import requests
 import streamlit as st
+from datetime import date, timedelta
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -75,6 +77,7 @@ def _set_user_cookie(user_data: dict):
     """Grava o cookie no navegador e recarrega a página pai."""
     import urllib.parse
     import json
+    # pyrefly: ignore [missing-import]
     import streamlit.components.v1 as components
     val = urllib.parse.quote(json.dumps(user_data))
     js_code = f"""
@@ -91,6 +94,7 @@ def _set_user_cookie(user_data: dict):
 
 def _delete_user_cookie():
     """Remove o cookie do navegador e recarrega a página pai."""
+    # pyrefly: ignore [missing-import]
     import streamlit.components.v1 as components
     js_code = """
     <script>
@@ -319,7 +323,26 @@ def salvar_historico(form_data: dict, prob: float, classificacao: str):
     """Insere uma avaliação na tabela `historico` do Supabase."""
     usuario = st.session_state.user.get("email", "Usuário")
     token   = st.session_state.user.get("token", "")
-    payload = {
+    
+    payload_full = {
+        "usuario":       usuario,
+        "idade":         form_data["idade"],
+        "nome":          form_data.get("nome", ""),
+        "sexo":          form_data.get("sexo", ""),
+        "cpf":           form_data.get("cpf", ""),
+        "febre":         form_data["febre"],
+        "tosse":         form_data["tosse"],
+        "dispneia":      form_data["dispneia"],
+        "garganta":      form_data["garganta"],
+        "saturacao":     form_data["saturacao"],
+        "asma":          form_data["asma"],
+        "diabetes":      form_data["diabetes"],
+        "cardiopatia":   form_data["cardiopatia"],
+        "probabilidade": round(prob, 2),
+        "classificacao": classificacao,
+    }
+    
+    payload_compat = {
         "usuario":       usuario,
         "idade":         form_data["idade"],
         "febre":         form_data["febre"],
@@ -333,18 +356,28 @@ def salvar_historico(form_data: dict, prob: float, classificacao: str):
         "probabilidade": round(prob, 2),
         "classificacao": classificacao,
     }
+    
+    headers = {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": f"Bearer {token}",
+        "Content-Type":  "application/json",
+        "Prefer":        "return=minimal",
+    }
+    
     try:
-        requests.post(
+        resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/historico",
-            headers={
-                "apikey":        SUPABASE_KEY,
-                "Authorization": f"Bearer {token}",
-                "Content-Type":  "application/json",
-                "Prefer":        "return=minimal",
-            },
-            json=payload,
+            headers=headers,
+            json=payload_full,
             timeout=10,
         )
+        if resp.status_code == 400:
+            requests.post(
+                f"{SUPABASE_URL}/rest/v1/historico",
+                headers=headers,
+                json=payload_compat,
+                timeout=10,
+            )
     except Exception:
         pass  # Falha silenciosa — não interrompe o fluxo principal
 
@@ -419,12 +452,56 @@ elif st.session_state.step == "form":
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="form-section-title">Dados Básicos</div>', unsafe_allow_html=True)
-    col_input, col_badge = st.columns([4, 1])
-    with col_input:
-        idade = st.number_input("Idade do Paciente (anos)", min_value=0, max_value=120, value=45, step=1)
-    with col_badge:
+    
+    nome = st.text_input("Nome Completo do Paciente", placeholder="Ex: Maria da Silva", key="paciente_nome")
+    
+    c1, c2, c3, c4 = st.columns([2, 1.0, 1.4, 0.8])
+    with c1:
+        cpf = st.text_input("CPF", placeholder="000.000.000-00", max_chars=14, key="paciente_cpf")
+        # Injeção de JS para aplicar a máscara no campo de CPF em tempo real (on key press)
+        st.components.v1.html(r"""
+        <script>
+        const doc = window.parent.document;
+        // Procura todos os inputs do Streamlit
+        const inputs = Array.from(doc.querySelectorAll('input'));
+        // Localiza o input do CPF pelo placeholder único
+        const cpfInput = inputs.find(i => i.placeholder === '000.000.000-00');
+        
+        if (cpfInput && !cpfInput.dataset.maskAttached) {
+            cpfInput.dataset.maskAttached = 'true';
+            cpfInput.addEventListener('input', function(e) {
+                let v = e.target.value.replace(/\D/g, ''); // Remove tudo que não for dígito
+                if (v.length > 14) v = v.slice(0, 14); // Max 14 dígitos
+                
+                // Aplica a máscara XXX.XXX.XXX-XX
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+                
+                if (e.target.value !== v) {
+                    // Atualiza o valor contornando o state do React para o Streamlit reconhecer
+                    let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    nativeInputValueSetter.call(e.target, v);
+                    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+        }
+        </script>
+        """, height=0, width=0)
+    with c2:
+        sexo = st.selectbox("Sexo", options=["Feminino", "Masculino"], index=None, placeholder="Selecione", key="paciente_sexo")
+    with c3:
+        data_minima = date.today() - timedelta(days=130*365)
+        data_nasc = st.date_input("Nascimento", value=None, min_value=data_minima, max_value=date.today(), format="DD/MM/YYYY", key="paciente_nascimento")
+        
+        if data_nasc:
+            hoje = date.today()
+            idade = hoje.year - data_nasc.year - ((hoje.month, hoje.day) < (data_nasc.month, data_nasc.day))
+        else:
+            idade = "—"
+    with c4:
         st.markdown(
-            f'<div class="idade-badge">'
+            f'<div class="idade-badge" style="margin-top: 24px;">'
             f'<span class="idade-valor">{idade}</span>'
             f'<span class="idade-label">anos</span>'
             f'</div>',
@@ -449,8 +526,28 @@ elif st.session_state.step == "form":
 
     st.write("")
 
-    # Validação: ao menos 1 sintoma ou comorbidade deve estar marcado
+    # Validação
     algum_selecionado = any([febre, tosse, dispneia, garganta, saturacao, asma, diabetes, cardiopatia])
+    cpf_numeros = "".join(filter(str.isdigit, cpf)) if cpf else ""
+    cpf_valido = len(cpf_numeros) == 11
+    dados_preenchidos = bool(nome and nome.strip() and cpf_valido and sexo and data_nasc)
+    pode_enviar = algum_selecionado and dados_preenchidos
+
+    if not dados_preenchidos:
+        st.markdown("""
+        <div style="
+            background: rgba(220,38,38,0.08);
+            border: 1px solid rgba(220,38,38,0.25);
+            border-radius: 14px;
+            padding: 14px 18px;
+            font-size: 0.88rem;
+            color: #991b1b;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 10px;
+        ">
+            ⚠️ Preencha todos os Dados Básicos (Nome, CPF válido, Sexo e Nascimento).
+        </div>
+        """, unsafe_allow_html=True)
 
     if not algum_selecionado:
         st.markdown("""
@@ -467,12 +564,27 @@ elif st.session_state.step == "form":
             ⚠️ Selecione ao menos um sintoma ou comorbidade para prosseguir.
         </div>
         """, unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="margin-bottom: 30px;"></div>', unsafe_allow_html=True)
 
-    if st.button("Analisar com IA →", type="primary", disabled=not algum_selecionado):
-        form_data = {
+    st.write("")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        analisar_clicado = st.button("Analisar com IA →", type="primary", disabled=not pode_enviar, use_container_width=True)
+    with col_btn2:
+        if st.button("📋 Ver Histórico", use_container_width=True):
+            st.session_state.step = "historico"
+            st.rerun()
+
+    if analisar_clicado:
+        payload_ia = {
             "idade": idade, "febre": febre, "tosse": tosse,
             "garganta": garganta, "dispneia": dispneia, "saturacao": saturacao,
             "asma": asma, "diabetes": diabetes, "cardiopatia": cardiopatia,
+        }
+        form_data = {
+            "nome": nome, "sexo": sexo, "cpf": cpf,
+            **payload_ia
         }
         prob_gravidade = 0.0
         classificacao  = "leve"
@@ -480,7 +592,7 @@ elif st.session_state.step == "form":
         erro_backend   = None
 
         try:
-            resp = requests.post(f"{API_BASE}/predict", json=form_data, timeout=15)
+            resp = requests.post(f"{API_BASE}/predict", json=payload_ia, timeout=15)
             resp.raise_for_status()
             payload        = resp.json()
             prob_gravidade = payload.get("probabilidadeGravidade", 0.0)
@@ -554,7 +666,14 @@ elif st.session_state.step == "result":
         """, unsafe_allow_html=True)
 
     st.markdown('<div class="form-section-title">Perfil do Paciente</div>', unsafe_allow_html=True)
-    st.markdown(f"**Idade:** {fd['idade']} anos")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"**Nome:** {fd.get('nome', '—') or '—'}")
+        st.markdown(f"**CPF:** {fd.get('cpf', '—') or '—'}")
+    with col2:
+        st.markdown(f"**Sexo:** {fd.get('sexo', '—') or '—'}")
+        st.markdown(f"**Idade:** {fd['idade']} anos")
 
     st.markdown('<div class="form-section-title">Sintomas e Comorbidades informados</div>', unsafe_allow_html=True)
     sintomas_marcados = [
@@ -632,6 +751,17 @@ elif st.session_state.step == "historico":
             prob  = reg.get("probabilidade", 0)
             idade = reg.get("idade", "—")
 
+            # Novos campos do paciente no histórico
+            reg_nome = reg.get("nome")
+            reg_sexo = reg.get("sexo")
+            reg_cpf = reg.get("cpf")
+            
+            perfil_detalhado = f"🎂 {idade} anos"
+            if reg_sexo:
+                perfil_detalhado += f" &nbsp;·&nbsp; 🚻 {reg_sexo}"
+            if reg_cpf:
+                perfil_detalhado += f" &nbsp;·&nbsp; 💳 CPF: {reg_cpf}"
+
             # Formata data
             criado_em = reg.get("criado_em", "")
             try:
@@ -650,43 +780,36 @@ elif st.session_state.step == "historico":
                 for s in sintomas
             ) if sintomas else '<span style="color:#94a3b8;font-size:0.82rem;">Nenhum sintoma registrado</span>'
 
-            st.markdown(f"""
-            <div style="
-                background: rgba(255,255,255,0.88);
-                border: 1px solid rgba(148,163,184,0.12);
-                border-radius: 18px;
-                padding: 22px 24px;
-                margin-bottom: 14px;
-                box-shadow: 0 4px 16px rgba(15,23,42,0.04);
-                position: relative;
-                overflow: hidden;
-            ">
-                <div style="position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,{cor},{cor}88);"></div>
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-                    <div>
-                        <div style="
-                            display:inline-flex;align-items:center;gap:6px;
-                            background:{bg};border:1px solid {border};
-                            border-radius:999px;padding:4px 12px;
-                            font-size:0.75rem;font-weight:700;color:{cor};
-                            font-family:'JetBrains Mono',monospace;
-                            text-transform:uppercase;letter-spacing:0.1em;
-                            margin-bottom:10px;
-                        ">{icon} {classi.upper()}</div>
-                        <div style="font-size:0.85rem;color:#64748b;font-family:'JetBrains Mono',monospace;">
-                            🕐 {data_fmt} &nbsp;·&nbsp; 👤 {reg.get("usuario","—")} &nbsp;·&nbsp; 🎂 {idade} anos
-                        </div>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
-                            {tags_html}
-                        </div>
-                    </div>
-                    <div style="text-align:right;min-width:80px;">
-                        <div style="font-size:2rem;font-weight:800;color:#0f172a;font-family:'JetBrains Mono',monospace;letter-spacing:-0.04em;">{prob:.1f}%</div>
-                        <div style="font-size:0.72rem;color:#94a3b8;">prob. complicação</div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            # HTML do nome do paciente
+            nome_html = f'<div style="font-size:0.92rem;font-weight:700;color:#0f172a;margin-bottom:4px;">🧑 {reg_nome}</div>' if reg_nome else ""
+
+            card_html = f"""
+<div style="background: rgba(255,255,255,0.88); border: 1px solid rgba(148,163,184,0.12); border-radius: 18px; padding: 22px 24px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(15,23,42,0.04); position: relative; overflow: hidden;">
+<div style="position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,{cor},{cor}88);"></div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+<div>
+<div style="display:inline-flex;align-items:center;gap:6px; background:{bg};border:1px solid {border}; border-radius:999px;padding:4px 12px; font-size:0.75rem;font-weight:700;color:{cor}; font-family:'JetBrains Mono',monospace; text-transform:uppercase;letter-spacing:0.1em; margin-bottom:10px;">
+{icon} {classi.upper()}
+</div>
+{nome_html}
+<div style="font-size:0.82rem;color:#64748b;font-family:'JetBrains Mono',monospace;margin-bottom:4px;">
+Data e Hora: 🕐 {data_fmt}
+</div>
+<div style="font-size:0.85rem;color:#475569;margin-bottom:4px;">
+{perfil_detalhado}
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+{tags_html}
+</div>
+</div>
+<div style="text-align:right;min-width:80px;">
+<div style="font-size:2rem;font-weight:800;color:#0f172a;font-family:'JetBrains Mono',monospace;letter-spacing:-0.04em;">{prob:.1f}%</div>
+<div style="font-size:0.72rem;color:#94a3b8;">prob. complicação</div>
+</div>
+</div>
+</div>
+"""
+            st.markdown(card_html, unsafe_allow_html=True)
 
     st.write("")
     if st.button("← Voltar", use_container_width=True):
