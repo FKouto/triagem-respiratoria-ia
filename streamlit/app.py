@@ -314,6 +314,62 @@ def render_footer():
     """, unsafe_allow_html=True)
 
 
+# ── Histórico — Supabase ──────────────────────────────────────
+def salvar_historico(form_data: dict, prob: float, classificacao: str):
+    """Insere uma avaliação na tabela `historico` do Supabase."""
+    usuario = st.session_state.user.get("email", "Usuário")
+    token   = st.session_state.user.get("token", "")
+    payload = {
+        "usuario":       usuario,
+        "idade":         form_data["idade"],
+        "febre":         form_data["febre"],
+        "tosse":         form_data["tosse"],
+        "dispneia":      form_data["dispneia"],
+        "garganta":      form_data["garganta"],
+        "saturacao":     form_data["saturacao"],
+        "asma":          form_data["asma"],
+        "diabetes":      form_data["diabetes"],
+        "cardiopatia":   form_data["cardiopatia"],
+        "probabilidade": round(prob, 2),
+        "classificacao": classificacao,
+    }
+    try:
+        requests.post(
+            f"{SUPABASE_URL}/rest/v1/historico",
+            headers={
+                "apikey":        SUPABASE_KEY,
+                "Authorization": f"Bearer {token}",
+                "Content-Type":  "application/json",
+                "Prefer":        "return=minimal",
+            },
+            json=payload,
+            timeout=10,
+        )
+    except Exception:
+        pass  # Falha silenciosa — não interrompe o fluxo principal
+
+
+def carregar_historico() -> list:
+    """Busca as avaliações do usuário logado, ordenadas da mais recente."""
+    usuario = st.session_state.user.get("email", "")
+    token   = st.session_state.user.get("token", "")
+    try:
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/historico"
+            f"?usuario=eq.{usuario}&order=criado_em.desc&limit=50",
+            headers={
+                "apikey":        SUPABASE_KEY,
+                "Authorization": f"Bearer {token}",
+            },
+            timeout=10,
+        )
+        if resp.ok:
+            return resp.json()
+    except Exception:
+        pass
+    return []
+
+
 # ══════════════════════════════════════════════════════════════
 # TELA: TREINAR
 # ══════════════════════════════════════════════════════════════
@@ -440,6 +496,9 @@ elif st.session_state.step == "form":
             "formData":               form_data,
             "erroBackend":            erro_backend,
         }
+        # Salva no histórico do Supabase (falha silenciosa)
+        if not erro_backend:
+            salvar_historico(form_data, prob_gravidade, classificacao)
         st.session_state.step = "result"
         st.rerun()
         
@@ -513,9 +572,125 @@ elif st.session_state.step == "result":
     st.markdown('<div class="section-spacing"></div>', unsafe_allow_html=True)
 
     st.write("")
-    if st.button("← Nova Avaliação"):
-        st.session_state.step      = "form"
-        st.session_state.resultado = None
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("← Nova Avaliação", use_container_width=True):
+            st.session_state.step      = "form"
+            st.session_state.resultado = None
+            st.rerun()
+    with c2:
+        if st.button("📋 Ver Histórico", type="primary", use_container_width=True):
+            st.session_state.step = "historico"
+            st.rerun()
+
+    render_footer()
+
+
+# ══════════════════════════════════════════════════════════════
+# TELA: HISTÓRICO
+# ══════════════════════════════════════════════════════════════
+elif st.session_state.step == "historico":
+
+    st.markdown("""
+    <div class="form-title">Histórico de Avaliações</div>
+    <div class="form-subtitle">Suas últimas 50 avaliações realizadas</div>
+    """, unsafe_allow_html=True)
+
+    with st.spinner("Carregando histórico..."):
+        registros = carregar_historico()
+
+    if not registros:
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 48px 24px;
+            background: rgba(255,255,255,0.6);
+            border: 1px solid rgba(148,163,184,0.12);
+            border-radius: 20px;
+            margin-top: 24px;
+        ">
+            <div style="font-size: 2.5rem; margin-bottom: 12px;">📋</div>
+            <div style="font-size: 1rem; font-weight: 600; color: #0f172a;">Nenhuma avaliação encontrada</div>
+            <div style="font-size: 0.88rem; color: #64748b; margin-top: 6px;">
+                As avaliações realizadas aparecerão aqui.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Badges de classificação
+        badge_cfg = {
+            "grave":    ("🚨", "#dc2626", "rgba(239,68,68,0.08)",   "rgba(239,68,68,0.2)"),
+            "moderado": ("⚠️", "#d97706", "rgba(245,158,11,0.08)",  "rgba(245,158,11,0.2)"),
+            "leve":     ("✅", "#059669", "rgba(16,185,129,0.08)",  "rgba(16,185,129,0.2)"),
+        }
+
+        sintoma_keys = ["febre", "tosse", "dispneia", "garganta", "saturacao", "asma", "diabetes", "cardiopatia"]
+
+        for reg in registros:
+            classi = reg.get("classificacao", "leve")
+            icon, cor, bg, border = badge_cfg.get(classi, badge_cfg["leve"])
+            prob  = reg.get("probabilidade", 0)
+            idade = reg.get("idade", "—")
+
+            # Formata data
+            criado_em = reg.get("criado_em", "")
+            try:
+                from datetime import datetime, timezone
+                dt = datetime.fromisoformat(criado_em.replace("Z", "+00:00"))
+                dt_local = dt.astimezone()
+                data_fmt = dt_local.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                data_fmt = criado_em[:16] if criado_em else "—"
+
+            # Tags de sintomas
+            sintomas = [_label_sintoma(k) for k in sintoma_keys if reg.get(k)]
+            tags_html = "".join(
+                f'<span style="background:rgba(255,255,255,0.8);border:1px solid rgba(148,163,184,0.2);'
+                f'border-radius:999px;padding:3px 10px;font-size:0.78rem;color:#334155;">{s}</span>'
+                for s in sintomas
+            ) if sintomas else '<span style="color:#94a3b8;font-size:0.82rem;">Nenhum sintoma registrado</span>'
+
+            st.markdown(f"""
+            <div style="
+                background: rgba(255,255,255,0.88);
+                border: 1px solid rgba(148,163,184,0.12);
+                border-radius: 18px;
+                padding: 22px 24px;
+                margin-bottom: 14px;
+                box-shadow: 0 4px 16px rgba(15,23,42,0.04);
+                position: relative;
+                overflow: hidden;
+            ">
+                <div style="position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,{cor},{cor}88);"></div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <div style="
+                            display:inline-flex;align-items:center;gap:6px;
+                            background:{bg};border:1px solid {border};
+                            border-radius:999px;padding:4px 12px;
+                            font-size:0.75rem;font-weight:700;color:{cor};
+                            font-family:'JetBrains Mono',monospace;
+                            text-transform:uppercase;letter-spacing:0.1em;
+                            margin-bottom:10px;
+                        ">{icon} {classi.upper()}</div>
+                        <div style="font-size:0.85rem;color:#64748b;font-family:'JetBrains Mono',monospace;">
+                            🕐 {data_fmt} &nbsp;·&nbsp; 👤 {reg.get("usuario","—")} &nbsp;·&nbsp; 🎂 {idade} anos
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+                            {tags_html}
+                        </div>
+                    </div>
+                    <div style="text-align:right;min-width:80px;">
+                        <div style="font-size:2rem;font-weight:800;color:#0f172a;font-family:'JetBrains Mono',monospace;letter-spacing:-0.04em;">{prob:.1f}%</div>
+                        <div style="font-size:0.72rem;color:#94a3b8;">prob. complicação</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.write("")
+    if st.button("← Voltar", use_container_width=True):
+        st.session_state.step = "form"
         st.rerun()
 
     render_footer()
