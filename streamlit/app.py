@@ -455,31 +455,33 @@ elif st.session_state.step == "form":
     
     nome = st.text_input("Nome Completo do Paciente", placeholder="Ex: Maria da Silva", key="paciente_nome")
     
-    c1, c2, c3, c4 = st.columns([2, 1.0, 1.4, 0.8])
+    # Redimensionamos para 2 colunas principais + a badge da idade
+    c1, c2, c3 = st.columns([2, 2, 0.8])
+    
     with c1:
         cpf = st.text_input("CPF", placeholder="000.000.000-00", max_chars=14, key="paciente_cpf")
-        # Injeção de JS para aplicar a máscara no campo de CPF em tempo real (on key press)
+        
+        # O campo Sexo agora fica logo abaixo do CPF na mesma coluna (c1)
+        sexo = st.selectbox("Sexo", options=["Feminino", "Masculino"], index=None, placeholder="Selecione", key="paciente_sexo")
+        
+        # Injeção de JS para aplicar a máscara no campo de CPF em tempo real
         st.components.v1.html(r"""
         <script>
         const doc = window.parent.document;
-        // Procura todos os inputs do Streamlit
         const inputs = Array.from(doc.querySelectorAll('input'));
-        // Localiza o input do CPF pelo placeholder único
         const cpfInput = inputs.find(i => i.placeholder === '000.000.000-00');
         
         if (cpfInput && !cpfInput.dataset.maskAttached) {
             cpfInput.dataset.maskAttached = 'true';
             cpfInput.addEventListener('input', function(e) {
-                let v = e.target.value.replace(/\D/g, ''); // Remove tudo que não for dígito
-                if (v.length > 14) v = v.slice(0, 14); // Max 14 dígitos
+                let v = e.target.value.replace(/\D/g, '');
+                if (v.length > 14) v = v.slice(0, 14);
                 
-                // Aplica a máscara XXX.XXX.XXX-XX
                 v = v.replace(/(\d{3})(\d)/, '$1.$2');
                 v = v.replace(/(\d{3})(\d)/, '$1.$2');
                 v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
                 
                 if (e.target.value !== v) {
-                    // Atualiza o valor contornando o state do React para o Streamlit reconhecer
                     let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     nativeInputValueSetter.call(e.target, v);
                     e.target.dispatchEvent(new Event('input', { bubbles: true }));
@@ -488,9 +490,8 @@ elif st.session_state.step == "form":
         }
         </script>
         """, height=0, width=0)
+        
     with c2:
-        sexo = st.selectbox("Sexo", options=["Feminino", "Masculino"], index=None, placeholder="Selecione", key="paciente_sexo")
-    with c3:
         data_minima = date.today() - timedelta(days=130*365)
         data_nasc = st.date_input("Nascimento", value=None, min_value=data_minima, max_value=date.today(), format="DD/MM/YYYY", key="paciente_nascimento")
         
@@ -499,9 +500,10 @@ elif st.session_state.step == "form":
             idade = hoje.year - data_nasc.year - ((hoje.month, hoje.day) < (data_nasc.month, data_nasc.day))
         else:
             idade = "—"
-    with c4:
+            
+    with c3:
         st.markdown(
-            f'<div class="idade-badge" style="margin-top: 24px;">'
+            f'<div class="idade-badge">'
             f'<span class="idade-valor">{idade}</span>'
             f'<span class="idade-label">anos</span>'
             f'</div>',
@@ -524,8 +526,6 @@ elif st.session_state.step == "form":
     diabetes    = c2.checkbox("💉 Diabetes")
     cardiopatia = c3.checkbox("❤️ Cardiopatia")
 
-    st.write("")
-
     # Validação
     algum_selecionado = any([febre, tosse, dispneia, garganta, saturacao, asma, diabetes, cardiopatia])
     cpf_numeros = "".join(filter(str.isdigit, cpf)) if cpf else ""
@@ -535,39 +535,18 @@ elif st.session_state.step == "form":
 
     if not dados_preenchidos:
         st.markdown("""
-        <div style="
-            background: rgba(220,38,38,0.08);
-            border: 1px solid rgba(220,38,38,0.25);
-            border-radius: 14px;
-            padding: 14px 18px;
-            font-size: 0.88rem;
-            color: #991b1b;
-            font-family: 'JetBrains Mono', monospace;
-            margin-bottom: 10px;
-        ">
+        <div class="aviso aviso-erro">
             ⚠️ Preencha todos os Dados Básicos (Nome, CPF válido, Sexo e Nascimento).
         </div>
         """, unsafe_allow_html=True)
 
     if not algum_selecionado:
         st.markdown("""
-        <div style="
-            background: rgba(245,158,11,0.08);
-            border: 1px solid rgba(245,158,11,0.25);
-            border-radius: 14px;
-            padding: 14px 18px;
-            font-size: 0.88rem;
-            color: #92400e;
-            font-family: 'JetBrains Mono', monospace;
-            margin-bottom: 30px;
-        ">
+        <div class="aviso aviso-alerta">
             ⚠️ Selecione ao menos um sintoma ou comorbidade para prosseguir.
         </div>
         """, unsafe_allow_html=True)
-    else:
-        st.markdown('<div style="margin-bottom: 30px;"></div>', unsafe_allow_html=True)
 
-    st.write("")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         analisar_clicado = st.button("Analisar com IA →", type="primary", disabled=not pode_enviar, use_container_width=True)
@@ -648,19 +627,32 @@ elif st.session_state.step == "result":
     c1, c2 = st.columns([2, 3])
     with c1:
         st.markdown(f"""
-        <div style="padding:20px 0 8px;">
+        <div class="prob-col-left">
             <div class="prob-value">{prob:.1f}%</div>
             <div class="prob-label">chance de complicação grave</div>
         </div>
         """, unsafe_allow_html=True)
     with c2:
+        lim = resultado.get("limiares", {"moderado": 30.0, "grave": 60.0})
+        lim_moderado = lim.get("moderado", 30.0)
+        lim_grave    = lim.get("grave",    60.0)
         st.markdown(f"""
-        <div style="padding:28px 0 8px;">
+        <div class="prob-col-right">
             <div class="prob-bar-wrap">
                 <div class="prob-bar-fill prob-bar-{classificacao}" style="width:{bar_pct}%"></div>
+                <div class="prob-bar-marker" style="left:{lim_moderado}%"></div>
+                <div class="prob-bar-marker" style="left:{lim_grave}%"></div>
             </div>
-            <div class="prob-scale">
-                <span>0%</span><span>Leve</span><span>Moderado</span><span>100%</span>
+            <div class="prob-bar-ticks">
+                <span class="prob-tick" style="left:0;">0%</span>
+                <span class="prob-tick" style="left:{lim_moderado}%;transform:translateX(-50%);">{int(lim_moderado)}%</span>
+                <span class="prob-tick" style="left:{lim_grave}%;transform:translateX(-50%);">{int(lim_grave)}%</span>
+                <span class="prob-tick" style="right:0;">100%</span>
+            </div>
+            <div class="prob-bar-labels">
+                <span style="width:{lim_moderado}%;">Leve</span>
+                <span style="width:{lim_grave - lim_moderado}%;">Moderado</span>
+                <span style="width:{100 - lim_grave}%;">Grave</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -686,18 +678,17 @@ elif st.session_state.step == "result":
         tags_html = "".join(f'<span class="sintoma-tag">{s}</span>' for s in sintomas_marcados)
         st.markdown(f'<div class="tags-wrap">{tags_html}</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<p style="color:#475569;font-size:0.88rem;">Nenhum sintoma ou comorbidade informado.</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sem-sintomas">Nenhum sintoma ou comorbidade informado.</p>', unsafe_allow_html=True)
         
     st.markdown('<div class="section-spacing"></div>', unsafe_allow_html=True)
 
-    st.write("")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("← Nova Avaliação", use_container_width=True):
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("← Nova Evaluation", use_container_width=True):
             st.session_state.step      = "form"
             st.session_state.resultado = None
             st.rerun()
-    with c2:
+    with col_btn2:
         if st.button("📋 Ver Histórico", type="primary", use_container_width=True):
             st.session_state.step = "historico"
             st.rerun()
@@ -720,19 +711,10 @@ elif st.session_state.step == "historico":
 
     if not registros:
         st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 48px 24px;
-            background: rgba(255,255,255,0.6);
-            border: 1px solid rgba(148,163,184,0.12);
-            border-radius: 20px;
-            margin-top: 24px;
-        ">
-            <div style="font-size: 2.5rem; margin-bottom: 12px;">📋</div>
-            <div style="font-size: 1rem; font-weight: 600; color: #0f172a;">Nenhuma avaliação encontrada</div>
-            <div style="font-size: 0.88rem; color: #64748b; margin-top: 6px;">
-                As avaliações realizadas aparecerão aqui.
-            </div>
+        <div class="historico-vazio">
+            <div class="historico-vazio-icon">📋</div>
+            <div class="historico-vazio-titulo">Nenhuma avaliação encontrada</div>
+            <div class="historico-vazio-desc">As avaliações realizadas aparecerão aqui.</div>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -772,41 +754,33 @@ elif st.session_state.step == "historico":
             except Exception:
                 data_fmt = criado_em[:16] if criado_em else "—"
 
-            # Tags de sintomas
+            # Tags de sintomas com bordas arredondadas sincronizadas com o style.css
             sintomas = [_label_sintoma(k) for k in sintoma_keys if reg.get(k)]
             tags_html = "".join(
                 f'<span style="background:rgba(255,255,255,0.8);border:1px solid rgba(148,163,184,0.2);'
-                f'border-radius:999px;padding:3px 10px;font-size:0.78rem;color:#334155;">{s}</span>'
+                f'border-radius:12px;padding:3px 10px;font-size:0.78rem;color:#334155;">{s}</span>'
                 for s in sintomas
             ) if sintomas else '<span style="color:#94a3b8;font-size:0.82rem;">Nenhum sintoma registrado</span>'
 
             # HTML do nome do paciente
-            nome_html = f'<div style="font-size:0.92rem;font-weight:700;color:#0f172a;margin-bottom:4px;">🧑 {reg_nome}</div>' if reg_nome else ""
+            nome_html = f'<div class="hist-nome">🧑 {reg_nome}</div>' if reg_nome else ""
 
             card_html = f"""
-<div style="background: rgba(255,255,255,0.88); border: 1px solid rgba(148,163,184,0.12); border-radius: 18px; padding: 22px 24px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(15,23,42,0.04); position: relative; overflow: hidden;">
-<div style="position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,{cor},{cor}88);"></div>
-<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-<div>
-<div style="display:inline-flex;align-items:center;gap:6px; background:{bg};border:1px solid {border}; border-radius:999px;padding:4px 12px; font-size:0.75rem;font-weight:700;color:{cor}; font-family:'JetBrains Mono',monospace; text-transform:uppercase;letter-spacing:0.1em; margin-bottom:10px;">
-{icon} {classi.upper()}
-</div>
-{nome_html}
-<div style="font-size:0.82rem;color:#64748b;font-family:'JetBrains Mono',monospace;margin-bottom:4px;">
-Data e Hora: 🕐 {data_fmt}
-</div>
-<div style="font-size:0.85rem;color:#475569;margin-bottom:4px;">
-{perfil_detalhado}
-</div>
-<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
-{tags_html}
-</div>
-</div>
-<div style="text-align:right;min-width:80px;">
-<div style="font-size:2rem;font-weight:800;color:#0f172a;font-family:'JetBrains Mono',monospace;letter-spacing:-0.04em;">{prob:.1f}%</div>
-<div style="font-size:0.72rem;color:#94a3b8;">prob. complicação</div>
-</div>
-</div>
+<div class="hist-card">
+    <div class="hist-card-accent" style="background:linear-gradient(90deg,{cor},{cor}88);"></div>
+    <div class="hist-card-body">
+        <div>
+            <div class="hist-badge" style="background:{bg};border-color:{border};color:{cor};">{icon} {classi.upper()}</div>
+            {nome_html}
+            <div class="hist-meta">Data e Hora: 🕐 {data_fmt}</div>
+            <div class="hist-perfil">{perfil_detalhado}</div>
+            <div class="hist-tags">{tags_html}</div>
+        </div>
+        <div class="hist-prob">
+            <div class="hist-prob-valor">{prob:.1f}%</div>
+            <div class="hist-prob-label">prob. complicação</div>
+        </div>
+    </div>
 </div>
 """
             st.markdown(card_html, unsafe_allow_html=True)
