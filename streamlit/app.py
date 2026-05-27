@@ -58,6 +58,26 @@ if "user" not in st.session_state or st.session_state.user is None:
         except Exception:
             pass
 
+def validar_cpf(cpf_str: str) -> bool:
+    """Valida se o CPF informado é válido."""
+    cpf = "".join(filter(str.isdigit, cpf_str))
+    if len(cpf) != 11:
+        return False
+    # Rejeita CPFs com todos os números iguais
+    if cpf == cpf[0] * 11:
+        return False
+    # Cálculo do primeiro dígito verificador
+    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+    resto = soma % 11
+    digito1 = 0 if resto < 2 else 11 - resto
+    if int(cpf[9]) != digito1:
+        return False
+    # Cálculo do segundo dígito verificador
+    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+    resto = soma % 11
+    digito2 = 0 if resto < 2 else 11 - resto
+    return int(cpf[10]) == digito2
+
 defaults = {
     "user":         None,   # dict com email e token quando logado
     "step":         "train",
@@ -512,11 +532,29 @@ elif st.session_state.step == "form":
         const inputs = Array.from(doc.querySelectorAll('input'));
         const cpfInput = inputs.find(i => i.placeholder === '000.000.000-00');
         
+        function isValidCPF(cpf) {
+            cpf = cpf.replace(/[^\d]+/g, '');
+            if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+            let soma = 0;
+            for (let i = 0; i < 9; i++) soma += parseInt(cpf.charAt(i)) * (10 - i);
+            let resto = 11 - (soma % 11);
+            if (resto === 10 || resto === 11) resto = 0;
+            if (resto !== parseInt(cpf.charAt(9))) return false;
+            soma = 0;
+            for (let i = 0; i < 10; i++) soma += parseInt(cpf.charAt(i)) * (11 - i);
+            resto = 11 - (soma % 11);
+            if (resto === 10 || resto === 11) resto = 0;
+            if (resto !== parseInt(cpf.charAt(10))) return false;
+            return true;
+        }
+
         if (cpfInput && !cpfInput.dataset.maskAttached) {
             cpfInput.dataset.maskAttached = 'true';
             cpfInput.addEventListener('input', function(e) {
                 let v = e.target.value.replace(/\D/g, '');
                 if (v.length > 14) v = v.slice(0, 14);
+                
+                let rawValue = v; // Guarda os números puros
                 
                 v = v.replace(/(\d{3})(\d)/, '$1.$2');
                 v = v.replace(/(\d{3})(\d)/, '$1.$2');
@@ -526,6 +564,35 @@ elif st.session_state.step == "form":
                     let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     nativeInputValueSetter.call(e.target, v);
                     e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                
+                // Mensagem de validação ao vivo
+                let stTextInput = cpfInput.closest('div[data-testid="stTextInput"]');
+                if (stTextInput) {
+                    let msgDiv = stTextInput.querySelector('.cpf-msg');
+                    if (!msgDiv) {
+                        msgDiv = doc.createElement('div');
+                        msgDiv.className = 'cpf-msg';
+                        msgDiv.style.fontSize = '0.8rem';
+                        msgDiv.style.marginTop = '4px';
+                        msgDiv.style.fontWeight = '600';
+                        stTextInput.appendChild(msgDiv);
+                    }
+                    
+                    if (rawValue.length === 11) {
+                        if (isValidCPF(rawValue)) {
+                            msgDiv.textContent = '✅ CPF Válido';
+                            msgDiv.style.color = '#059669';
+                        } else {
+                            msgDiv.textContent = '❌ CPF Inválido';
+                            msgDiv.style.color = '#dc2626';
+                        }
+                    } else if (rawValue.length > 0) {
+                        msgDiv.textContent = '⏳ Digitando...';
+                        msgDiv.style.color = '#94a3b8';
+                    } else {
+                        msgDiv.textContent = '';
+                    }
                 }
             });
         }
@@ -569,8 +636,7 @@ elif st.session_state.step == "form":
 
     # Validação
     algum_selecionado = any([febre, tosse, dispneia, garganta, saturacao, asma, diabetes, cardiopatia])
-    cpf_numeros = "".join(filter(str.isdigit, cpf)) if cpf else ""
-    cpf_valido = len(cpf_numeros) == 11
+    cpf_valido = validar_cpf(cpf) if cpf else False
     dados_preenchidos = bool(nome and nome.strip() and cpf_valido and sexo and data_nasc)
     pode_enviar = algum_selecionado and dados_preenchidos
 
