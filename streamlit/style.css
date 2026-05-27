@@ -1,6 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ══════════════════════════════════════════════════════════════
+   ESTRUTURA E TOPO DO SISTEMA
+══════════════════════════════════════════════════════════════ */
+
+/* 1. Remove qualquer padding do container e das sub-divs de visualização */
+[data-testid="stAppViewBlockContainer"],
+.main .block-container,
+[data-testid="stVerticalBlock"] > div {
+    padding-top: 0px !important;
+    margin-top: 0px !important;
+}
+
+/* 2. Zera o espaçamento fantasma que o Streamlit coloca antes do primeiro elemento */
+[data-testid="stVerticalBlock"] > div:first-child {
+    padding-top: 0px !important;
+    margin-top: 0px !important;
+}
+
+/* 3. Força o topo do wrapper do login a subir usando margem negativa */
+.login-wrapper {
+    text-align: center;
+    padding: 0px 20px 20px !important;
+    margin-top: -70px !important; /* Puxa o ícone do estetoscópio e todo o resto para cima */
+}
+
+/* 4. Remove espaços residuais acima do formulário */
+[data-testid="stForm"] {
+    margin-top: -5px !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
    RESET GLOBAL
 ══════════════════════════════════════════════════════════════ */
 *, *::before, *::after {
@@ -490,37 +520,84 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   INPUTS
+   INPUTS (VERSÃO COMPLETA E ATUALIZADA)
 ══════════════════════════════════════════════════════════════ */
 
-/* Number input (idade) */
-[data-testid="stNumberInput"] {
-    padding: 14px 18px 10px;
-    background: rgba(255,255,255,0.78);
-    border: 1px solid rgba(148,163,184,0.12);
-    border-radius: 18px;
-    margin-bottom: 8px;
+/* 1. Limpa os fundos e bordas de QUALQUER container pai para liberar os labels */
+[data-testid="stTextInput"], 
+[data-testid="stNumberInput"], 
+[data-testid="stSelectbox"],
+[data-testid="stDateInput"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
 }
 
-[data-testid="stNumberInput"] label {
-    color: #334155 !important;
-    font-size: 0.92rem !important;
-    font-weight: 600 !important;
+/* 2. Visual nas caixas de texto/input (divs internas do BaseWeb) */
+[data-testid="stTextInput"] [data-baseweb="input"],
+[data-testid="stNumberInput"] [data-baseweb="input"],
+[data-testid="stDateInput"] [data-baseweb="input"],
+[data-testid="stSelectbox"] [data-baseweb="select"] > div:first-child {
+    background: rgba(255, 255, 255, 0.86) !important;
+    border: 1px solid rgba(148, 163, 184, 0.14) !important;
+    border-radius: 16px !important;
+    padding: 6px 14px !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02) !important;
+    transition: transform 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
+    height: 48px !important; /* Força altura idêntica para todos */
+    display: flex !important;
+    align-items: center !important;
 }
 
-[data-testid="stNumberInput"] input {
-    font-size: 1.1rem !important;
-    font-weight: 600 !important;
-    font-family: 'JetBrains Mono', monospace !important;
+/* 3. Força a remoção do fundo cinza OU branco nativo das sub-divs (Garante a mesma transparência) */
+[data-testid="stTextInput"] [data-baseweb="base-input"],
+[data-testid="stNumberInput"] [data-baseweb="base-input"],
+[data-testid="stDateInput"] [data-baseweb="base-input"],
+[data-testid="stTextInput"] div[role="textbox"],
+[data-testid="stTextInput"] [data-baseweb="input"] > div {
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* 4. Efeito Hover unificado para as caixas brancas */
+[data-testid="stTextInput"] [data-baseweb="input"]:hover,
+[data-testid="stNumberInput"] [data-baseweb="input"]:hover,
+[data-testid="stDateInput"] [data-baseweb="input"]:hover,
+[data-testid="stSelectbox"] [data-baseweb="select"] > div:first-child:hover {
+    transform: translateY(-2px);
+    border-color: rgba(212, 16, 16, 0.516) !important;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.06) !important;
+}
+
+/* 5. Garante que os textos digitados e placeholders fiquem visíveis e limpos */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stDateInput"] input {
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
     color: #0f172a !important;
-    border-radius: 12px !important;
-    border: 1px solid rgba(148,163,184,0.22) !important;
-    padding: 10px 14px !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    width: 100% !important;
 }
 
-[data-testid="stNumberInput"] input:focus {
-    border-color: #2563eb !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.10) !important;
+/* 6. Remove outlines e sombras padrão do Streamlit ao focar no campo */
+[data-testid="stTextInput"] input:focus,
+[data-testid="stNumberInput"] input:focus,
+[data-testid="stDateInput"] input:focus,
+[data-baseweb="select"]:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* 7. Ajuste específico para os seletores de incremento/decremento (+ e -) do Number Input */
+[data-testid="stNumberInput"] button {
+    background-color: transparent !important;
+    border: none !important;
+    color: #64748b !important;
 }
 
 /* Idade badge (ao lado do slider) */
@@ -570,54 +647,46 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
 
 /* Checkbox */
 [data-testid="stCheckbox"] {
-
-    background:
-        rgba(255,255,255,0.78);
-
-    border:
-        1px solid rgba(148,163,184,0.12);
-
+    background: rgba(255,255,255,0.78);
+    border: 1px solid rgba(148,163,184,0.12);
     border-radius: 16px;
-
     padding: 12px 16px;
-
     margin-bottom: 12px;
-
-    transition:
-        transform 0.2s ease,
-        border 0.2s ease,
-        box-shadow 0.2s ease;
+    transition: transform 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
 }
 
 [data-testid="stCheckbox"]:hover {
-
     transform: translateY(-2px);
-
-    border-color:
-        rgba(37,99,235,0.18);
-
-    box-shadow:
-        0 10px 24px rgba(37,99,235,0.06);
+    border-color: rgba(37, 99, 235, 0.18);
+    box-shadow: 0 10px 24px rgba(37,99,235,0.06);
 }
 
 [data-testid="stCheckbox"] label {
-
     color: #0f172a !important;
-
     font-size: 0.92rem !important;
-
     font-weight: 500 !important;
 }
 
 [data-testid="stCheckbox"] > label > div:first-child {
-
     border-radius: 8px !important;
+    border-color: rgba(148,163,184,0.28) !important;
+    background: rgba(255,255,255,0.8) !important;
+}
 
-    border-color:
-        rgba(148,163,184,0.28) !important;
+/* ══════════════════════════════════════════════════════════════
+   REMOVER INDICAÇÃO "PRESS ENTER TO APPLY" DO STREAMLIT
+══════════════════════════════════════════════════════════════ */
 
-    background:
-        rgba(255,255,255,0.8) !important;
+/* Esconde o container do aviso "Press Enter to apply" e o ícone de check */
+[data-testid="stTextInput"] [data-testid="InputInstructions"],
+[data-testid="stNumberInput"] [data-testid="InputInstructions"],
+[data-testid="stDateInput"] [data-testid="InputInstructions"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -767,8 +836,9 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
 
     border-radius: 999px;
 
-    background:
-        rgba(148,163,184,0.12);
+    background: rgba(148,163,184,0.12);
+
+    position: relative;
 }
 
 .prob-bar-fill {
@@ -964,127 +1034,141 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   LOGIN / CADASTRO
+   LOGIN / CADASTRO (ATUALIZADO)
 ══════════════════════════════════════════════════════════════ */
 .login-wrapper {
     text-align: center;
-
     padding: 50px 20px 30px;
 }
 
 .login-icon {
     font-size: 3.5rem;
-
     margin-bottom: 14px;
-
-    background:
-        linear-gradient(135deg, #2563eb, #0ea5e9);
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .login-title {
     font-size: 2.6rem;
-
     font-weight: 800;
-
     letter-spacing: -0.06em;
-
     color: #0f172a;
-
     margin-bottom: 8px;
 }
 
 .login-subtitle {
     font-size: 0.78rem;
-
     color: #64748b;
-
     font-family: 'JetBrains Mono', monospace;
-
     letter-spacing: 0.04em;
 }
 
 /* Tabs de Login/Cadastro */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
     gap: 0 !important;
-
-    background: rgba(255,255,255,0.6);
-
-    border-radius: 14px;
-
-    padding: 4px;
-
-    border: 1px solid rgba(148,163,184,0.12);
+    background: rgba(255,255,255,0.6) !important;
+    border-radius: 14px !important;
+    padding: 4px !important;
+    border: 1px solid rgba(148,163,184,0.12) !important;
 }
 
 [data-testid="stTabs"] [data-baseweb="tab"] {
     border-radius: 10px !important;
-
     font-family: 'Inter', sans-serif !important;
     font-weight: 600 !important;
     font-size: 0.88rem !important;
-
     color: #64748b !important;
-
     padding: 10px 24px !important;
-
     transition: all 0.2s ease;
 }
 
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
     background: white !important;
-
     color: #2563eb !important;
-
-    box-shadow: 0 2px 8px rgba(37,99,235,0.10);
+    box-shadow: 0 2px 8px rgba(37,99,235,0.10) !important;
 }
 
-[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
-    display: none !important;
-}
-
+[data-testid="stTabs"] [data-baseweb="tab-highlight"],
 [data-testid="stTabs"] [data-baseweb="tab-border"] {
     display: none !important;
 }
 
-/* Form inputs na tela de login */
+/* Form container na tela de login */
 [data-testid="stForm"] {
-    background: rgba(255,255,255,0.82);
-
-    border: 1px solid rgba(148,163,184,0.12);
-
-    border-radius: 22px;
-
-    padding: 28px 24px;
-
-    backdrop-filter: blur(14px);
-
-    box-shadow: 0 8px 28px rgba(15,23,42,0.05);
+    background: rgba(255,255,255,0.82) !important;
+    border: 1px solid rgba(148,163,184,0.12) !important;
+    border-radius: 22px !important;
+    padding: 28px 24px !important;
+    backdrop-filter: blur(14px) !important;
+    box-shadow: 0 8px 28px rgba(15,23,42,0.05) !important;
 }
 
 [data-testid="stForm"] [data-testid="stTextInput"] label {
     color: #334155 !important;
     font-size: 0.85rem !important;
     font-weight: 600 !important;
+    margin-bottom: 6px !important;
 }
 
+/* Correção da Borda Dupla: Aplica o estilo na div wrapper do BaseWeb */
+[data-testid="stForm"] [data-testid="stTextInput"] [data-baseweb="input"] {
+    background: rgba(255, 255, 255, 0.86) !important;
+    border: 1px solid rgba(148, 163, 184, 0.22) !important;
+    border-radius: 16px !important;
+    height: 48px !important;
+    padding: 0 6px !important;
+    box-shadow: none !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Remove os estilos conflitantes da tag nativa input interna */
 [data-testid="stForm"] [data-testid="stTextInput"] input {
-    border-radius: 12px !important;
-
-    border: 1px solid rgba(148,163,184,0.22) !important;
-
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
     padding: 10px 14px !important;
-
     font-size: 0.95rem !important;
-
     font-family: 'Inter', sans-serif !important;
+    box-shadow: none !important;
+    height: 100% !important;
 }
 
-[data-testid="stForm"] [data-testid="stTextInput"] input:focus {
-    border-color: #2563eb !important;
+/* Remove backgrounds indesejados nas sub-divs geradas pelo tipo password */
+[data-testid="stForm"] [data-testid="stTextInput"] [data-baseweb="base-input"],
+[data-testid="stForm"] [data-testid="stTextInput"] [data-baseweb="input"] > div {
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+}
 
+/* Efeito de Focus unificado na borda externa */
+[data-testid="stForm"] [data-testid="stTextInput"]:focus-within [data-baseweb="input"] {
+    border-color: #2563eb !important;
     box-shadow: 0 0 0 3px rgba(37,99,235,0.10) !important;
+}
+
+/* Estilização do Botão Primário do Formulário (Entrar / Criar Conta) */
+[data-testid="stForm"] button[data-testid="baseButton-primary"] {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 16px !important;
+    height: 48px !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2) !important;
+    transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+    margin-top: 15px !important;
+}
+
+[data-testid="stForm"] button[data-testid="baseButton-primary"]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 16px rgba(14, 165, 233, 0.3) !important;
+}
+
+[data-testid="stForm"] button[data-testid="baseButton-primary"]:active {
+    transform: translateY(1px) !important;
 }
 
 [data-testid="stToolbar"] {
@@ -1093,4 +1177,226 @@ div[data-testid="stButton"] > button:not([kind="primary"]):hover {
 
 .stAppDeployButton {
     display: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AVISOS DE VALIDAÇÃO
+══════════════════════════════════════════════════════════════ */
+.aviso {
+    border-radius: 14px;
+    padding: 14px 18px;
+    font-size: 0.88rem;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 10px;
+}
+
+.aviso-erro {
+    background: rgba(220, 38, 38, 0.08);
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    color: #991b1b;
+}
+
+.aviso-alerta {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    color: #92400e;
+    margin-bottom: 30px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BARRA DE PROBABILIDADE — COLUNAS E MARCADORES
+══════════════════════════════════════════════════════════════ */
+.prob-col-left {
+    padding: 20px 0 8px;
+}
+
+.prob-col-right {
+    padding: 28px 0 8px;
+}
+
+.prob-bar-marker {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background: rgba(100, 116, 139, 0.3);
+}
+
+.prob-bar-ticks {
+    position: relative;
+    height: 18px;
+    margin-top: 4px;
+}
+
+.prob-tick {
+    position: absolute;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.prob-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.68rem;
+    color: #475569;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+    font-weight: 600;
+}
+
+.prob-bar-labels span {
+    text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESULTADO — SEM SINTOMAS
+══════════════════════════════════════════════════════════════ */
+.sem-sintomas {
+    color: #475569;
+    font-size: 0.88rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   HISTÓRICO — ESTADO VAZIO
+══════════════════════════════════════════════════════════════ */
+.historico-vazio {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 20px;
+    margin-top: 24px;
+}
+
+.historico-vazio-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+}
+
+.historico-vazio-titulo {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.historico-vazio-desc {
+    font-size: 0.88rem;
+    color: #64748b;
+    margin-top: 6px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   HISTÓRICO — CARDS
+══════════════════════════════════════════════════════════════ */
+.hist-card {
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 18px;
+    padding: 22px 24px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.hist-card-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+}
+
+.hist-card-body {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.hist-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+    border: 1px solid;
+}
+
+.hist-nome {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+.hist-meta {
+    font-size: 0.82rem;
+    color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+}
+
+.hist-perfil {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+.hist-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.hist-tag {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.78rem;
+    color: #334155;
+}
+
+.hist-sem-sintoma {
+    color: #94a3b8;
+    font-size: 0.82rem;
+}
+
+.hist-prob {
+    text-align: right;
+    min-width: 80px;
+}
+
+.hist-prob-valor {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.04em;
+}
+
+.hist-prob-label {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UTILITÁRIOS
+══════════════════════════════════════════════════════════════ */
+.spacer-bottom {
+    margin-bottom: 30px;
+}
+
+.idade-badge {
+    margin-top: 24px;
 }
