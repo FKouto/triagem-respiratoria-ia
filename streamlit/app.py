@@ -389,7 +389,7 @@ def carregar_historico() -> list:
     try:
         resp = requests.get(
             f"{SUPABASE_URL}/rest/v1/historico"
-            f"?usuario=eq.{usuario}&order=criado_em.desc&limit=50",
+            f"?select=*,feedbacks(desfecho_real_grave)&usuario=eq.{usuario}&order=criado_em.desc&limit=50",
             headers={
                 "apikey":        SUPABASE_KEY,
                 "Authorization": f"Bearer {token}",
@@ -401,6 +401,47 @@ def carregar_historico() -> list:
     except Exception:
         pass
     return []
+
+
+def enviar_feedback(id_historico: int, desfecho_real_grave: bool):
+    """Envia o feedback do médico para a tabela feedbacks no Supabase."""
+    token = st.session_state.user.get("token", "")
+    headers = {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": f"Bearer {token}",
+        "Content-Type":  "application/json",
+        "Prefer":        "return=minimal",
+    }
+    payload = {
+        "id_historico": id_historico,
+        "desfecho_real_grave": desfecho_real_grave
+    }
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/feedbacks",
+            headers=headers,
+            json=payload,
+            timeout=10,
+        )
+        if resp.ok:
+            st.success("✅ Feedback registrado com sucesso!")
+            # Recarrega a página para atualizar o status (o query param já foi limpo)
+            st.rerun()
+        else:
+            st.error(f"Erro ao registrar feedback: {resp.text}")
+    except Exception as e:
+        st.error(f"Erro de conexão: {e}")
+
+# Processa cliques nos botões de feedback do histórico via query params
+params = st.query_params
+if "fb_id" in params and "fb_grave" in params:
+    try:
+        f_id = int(params["fb_id"])
+        f_grave = params["fb_grave"] == "1"
+        st.query_params.clear()
+        enviar_feedback(f_id, f_grave)
+    except Exception:
+        pass
 
 
 # ══════════════════════════════════════════════════════════════
@@ -781,8 +822,31 @@ elif st.session_state.step == "historico":
             <div class="hist-prob-label">prob. complicação</div>
         </div>
     </div>
+"""
+
+            # Lógica de Feedback embutida no cartão
+            feedbacks_do_registro = reg.get("feedbacks", [])
+            ja_validado = len(feedbacks_do_registro) > 0
+
+            if ja_validado:
+                desfecho_grave = feedbacks_do_registro[0].get("desfecho_real_grave", False)
+                texto_desfecho = "Grave" if desfecho_grave else "Leve/Moderado"
+                card_html += f"""
+<div style="margin-top:16px;padding:10px;background:rgba(16,185,129,0.1);border-radius:12px;color:#059669;font-size:0.85rem;font-weight:600;text-align:center;border:1px solid rgba(16,185,129,0.2);">
+    ✅ Validado pelo médico como: {texto_desfecho}
 </div>
 """
+            else:
+                id_hist = reg.get("id")
+                if id_hist:
+                    card_html += f"""
+<div class="hist-card-actions" style="display:flex;gap:12px;margin-top:16px;border-top:1px solid rgba(148,163,184,0.12);padding-top:16px;">
+    <a href="?fb_id={id_hist}&fb_grave=1" target="_self" class="btn-primary" style="flex:1;text-decoration:none;font-size:0.85rem;font-weight:600;padding:10px 16px;border-radius:10px;text-align:center;background:linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);color:white;box-shadow:0 4px 12px rgba(37,99,235,0.15);">Confirmar Evolução: Grave (UTI/Óbito)</a>
+    <a href="?fb_id={id_hist}&fb_grave=0" target="_self" class="btn-secondary" style="flex:1;text-decoration:none;font-size:0.85rem;font-weight:600;padding:10px 16px;border-radius:10px;text-align:center;background:rgba(241,245,249,1);color:#475569;border:1px solid rgba(148,163,184,0.2);">Confirmar Evolução: Leve/Moderado</a>
+</div>
+"""
+            
+            card_html += "</div>"
             st.markdown(card_html, unsafe_allow_html=True)
 
     st.write("")
